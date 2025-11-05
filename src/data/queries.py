@@ -36,7 +36,7 @@ from src.core.fiscal_calendar import adjust_for_cutoff, get_fiscal_year, get_fis
 # ============================================================================
 
 # Materialized view name (from environment or default)
-MV_NAME = os.getenv('MV_NAME', 'orders_view')  # Update with actual name from client
+MV_NAME = os.getenv('MATERIALIZED_VIEW_NAME', 'orders_view')  # Update with actual name from client
 
 
 # ============================================================================
@@ -319,12 +319,14 @@ def get_view_schema() -> Dict[str, str]:
         >>> print(schema)
         {'order_id': 'integer', 'order_date': 'date', 'net_sales': 'numeric', ...}
     """
+    # First try: Query information_schema
     query = f"""
         SELECT
             column_name,
             data_type
         FROM information_schema.columns
         WHERE table_name = :table_name
+        AND table_schema = 'public'
         ORDER BY ordinal_position
     """
 
@@ -332,6 +334,36 @@ def get_view_schema() -> Dict[str, str]:
     with db.get_connection() as conn:
         result = conn.execute(text(query), {'table_name': MV_NAME})
         rows = result.fetchall()
+
+        # If no results, query the view directly to get column names and types
+        if not rows:
+            # Query one row to get column names and infer types
+            result = conn.execute(text(f"SELECT * FROM {MV_NAME} LIMIT 1"))
+
+            # Get column names from result keys
+            columns = result.keys()
+
+            # Get data types from the result description
+            # PostgreSQL type codes to names mapping
+            type_map = {
+                23: 'integer',
+                25: 'text',
+                1043: 'character varying',
+                1082: 'date',
+                1114: 'timestamp without time zone',
+                1700: 'numeric',
+                701: 'double precision',
+                16: 'boolean'
+            }
+
+            schema = {}
+            for idx, col_name in enumerate(columns):
+                # Get the type from cursor description
+                type_code = result.cursor.description[idx].type_code
+                data_type = type_map.get(type_code, f'unknown({type_code})')
+                schema[col_name] = data_type
+
+            return schema
 
     schema = {row[0]: row[1] for row in rows}
     return schema

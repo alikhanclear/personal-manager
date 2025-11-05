@@ -228,41 +228,81 @@ casualhero/
 - ✅ `src/data/` - Database layer (connector, queries)
 - ✅ `config/` - Configuration files (fiscal overrides)
 
+### ✅ COMPLETED (Session 2 - Nov 5, 2025)
+
+**1. AWS Database Connection**
+- ✅ Connected to AWS RDS PostgreSQL 15.12
+- ✅ Database: `snowflake_sftp`
+- ✅ Endpoint: `snowflake-gelato-db-restored.c31jl8xofey0.eu-west-2.rds.amazonaws.com`
+- ✅ SSL/TLS connection working
+- ✅ Password URL-encoding for special characters
+
+**2. Materialized View Discovery**
+- ✅ Found view: `public.mv_item_details`
+- ✅ Schema discovered (11 columns)
+- ✅ Connection test successful
+- ✅ Sample data queried
+
+**3. Schema: `mv_item_details`**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| Establishment | text | Location/store name |
+| Order_Number | bigint | Unique order ID |
+| Order_Date | timestamp without time zone | Order timestamp |
+| Clean_Product_Name | text | Product name |
+| Clean_Class | text | Product category |
+| Total_Sales_Actual | numeric | Total sales (with tax) |
+| Net_Sales_Actual | numeric | Net sales (before tax) |
+| Product_Quantity | integer | Quantity sold |
+| Total_Product_Tax | numeric | Tax amount |
+| Eat_In_Or_Take_Away | text | Order type |
+| Product Type | text | Product type |
+
+**4. Git Repository Setup**
+- ✅ Private GitHub repository created: `alikhanclear/casualhero-bi`
+- ✅ `.gitignore` protecting credentials
+- ✅ Initial commit pushed
+- ✅ All foundational code in version control
+
 ### 🔄 IN PROGRESS
 
-**Waiting on Client (Expected Tomorrow):**
-1. AWS PostgreSQL connection details
-   - Host, port, database name
-   - Username/password (read-only user preferred)
-   - Security group configured for developer IP
-2. Materialized view details
-   - View name
-   - Column schema (names and data types)
-   - Sample data (10-20 rows)
-   - Refresh schedule
+**Next Steps:**
+1. Get DAX measure examples from Power BI
+2. Get Power BI dashboard screenshots
+3. Build KPI calculator module
+4. Start Streamlit UI development
 
-### ⏳ NEXT STEPS (Once AWS Credentials Received)
+### ⏳ NEXT STEPS - Phase 1B: Build KPI Calculator
 
-**Phase 1A: Connect to AWS Database**
-1. Test database connection
-2. Discover materialized view schema
-3. Update query functions with actual column names
-4. Pull sample data and validate structure
+**Prerequisites from Client:**
+1. **DAX Measure Examples (3-5 measures)**
+   - YTD calculations
+   - YoY comparisons
+   - Budget variance formulas
+   - Any time intelligence functions
+   - Export from Power BI → Model → Manage measures
 
-**Phase 1B: Build KPI Calculator**
-1. Get 3-5 DAX measure examples from client
-2. Create `src/core/kpi_calculator.py`
-3. Translate DAX logic to Polars/DuckDB
-4. Validate calculations against Power BI outputs
+2. **Power BI Dashboard Screenshots**
+   - Weekly report (5 pages) - annotated with what each chart shows
+   - Monthly report (5-6 pages) - annotated with data sources
+   - Matrix/table layouts with column names visible
+
+**Development Tasks:**
+1. Create `src/core/kpi_calculator.py`
+2. Translate DAX measures to Polars/DuckDB expressions
+3. Build test cases comparing against Power BI outputs
+4. Validate all calculations match exactly
+
+### ⏳ FUTURE PHASES
 
 **Phase 1C: Build Streamlit Dashboard**
-1. Get Power BI dashboard screenshots
-2. Create `src/ui/app.py` (main Streamlit app)
-3. Implement weekly report (5 pages)
-4. Implement monthly report (5-6 pages)
-5. Deploy to Fly.io
+1. Create `src/ui/app.py` (main Streamlit app)
+2. Implement weekly report (5 pages)
+3. Implement monthly report (5-6 pages)
+4. Deploy to Fly.io
 
-**Phase 1D: MVP Delivery (Target: 2-3 weeks)**
+**Phase 1D: MVP Delivery (Target: 2-3 weeks total)**
 - Full like-for-like replacement of Power BI dashboards
 - Validated against Power BI outputs
 - Running on Fly.io
@@ -333,5 +373,5 @@ Claude will automatically read this file and understand the full context!
 
 ---
 
-**Last Updated:** Nov 4, 2025 - Session 1
-**Next Session:** Connect to AWS database and discover materialized view schema
+**Last Updated:** Nov 5, 2025 - Session 2
+**Next Session:** Get DAX measures and Power BI screenshots, build KPI calculator
