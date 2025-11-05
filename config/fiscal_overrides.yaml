@@ -1,0 +1,43 @@
+# ============================================================================
+# Fiscal Year Week 1 Start Dates - PROTECTED CONFIGURATION
+# ============================================================================
+#
+# BUSINESS RULE:
+# - Fiscal Year: October 1 - September 30
+# - Weeks: Monday - Sunday
+# - Week 1 always starts on a Monday
+#
+# IMPORTANT:
+# - This file should be maintained by authorized personnel only
+# - Each fiscal year MUST have a Week 1 start date defined
+# - Format: fiscal_year: "YYYY-MM-DD" (ISO 8601 date format)
+# - All dates must be Mondays
+#
+# NOTES:
+# - Week 1 can start in late September (if Oct 1 falls mid-week)
+# - Week 1 can start in early October (if Oct 1 is Sunday)
+# - Example: If Oct 1 is Sunday, Week 1 starts the next Monday (Oct 2)
+# - Example: If Oct 1 is Tuesday, Week 1 starts the prior Monday (Sep 30)
+#
+# ============================================================================
+
+fiscal_overrides:
+  2024: "2023-10-02"  # Oct 1, 2023 was Sunday → Week 1 starts Monday Oct 2
+  2025: "2024-09-30"  # Oct 1, 2024 was Tuesday → Week 1 starts Monday Sep 30
+  2026: "2025-09-29"  # Oct 1, 2025 was Wednesday → Week 1 starts Monday Sep 29
+  # Add future years below as needed
+  # 2027: "YYYY-MM-DD"
+  # 2028: "YYYY-MM-DD"
+
+# ============================================================================
+# MAINTENANCE INSTRUCTIONS:
+# ============================================================================
+#
+# To add a new fiscal year:
+# 1. Determine what day of week October 1 falls on
+# 2. Find the Monday on or before October 1 (unless Oct 1 is Sunday)
+# 3. If October 1 is Sunday, use the next Monday (October 2)
+# 4. Add entry: fiscal_year: "YYYY-MM-DD"
+# 5. Validate the date is correct before deploying
+#
+# ============================================================================

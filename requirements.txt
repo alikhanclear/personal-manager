@@ -1,0 +1,29 @@
+# ============================================================================
+# CasualHero BI Platform - Python Dependencies
+# ============================================================================
+
+# Core Data Processing
+polars>=0.20.0              # High-performance DataFrame library (5-10x faster than pandas)
+duckdb>=0.10.0              # In-process SQL analytics database
+
+# Configuration
+pyyaml>=6.0.1               # YAML config parsing (fiscal_overrides.yaml)
+
+# Web Framework
+streamlit>=1.31.0           # Web UI framework for dashboards
+
+# Visualization
+plotly>=5.18.0              # Interactive charts (Express + Graph Objects)
+
+# Database
+sqlalchemy>=2.0.0           # Database ORM and connection management
+psycopg2-binary>=2.9.9      # PostgreSQL adapter for SQLAlchemy
+
+# Development Tools
+black>=24.0.0               # Code formatter
+mypy>=1.8.0                 # Static type checker
+pytest>=8.0.0               # Testing framework
+pytest-cov>=4.1.0           # Test coverage reports
+
+# Utilities
+python-dotenv>=1.0.0        # Environment variable management (.env files)
