@@ -320,31 +320,99 @@ casualhero/
 - ✅ Data preparation pipeline with fiscal calendar integration
 - ✅ Production-ready: type hints, docstrings, error handling
 
+**Key Functions Implemented:**
+```python
+- prepare_transaction_data()      # 7AM cutoff + fiscal calendar
+- calculate_weekly_sales()        # YoY sales comparison
+- calculate_4week_avg()           # Rolling 4-week average
+- calculate_order_volumes()       # Order count (not items)
+- calculate_atv()                 # Sales / Order count
+- calculate_weekly_report()       # Combines all metrics
+- add_company_totals()            # Subtotals by company
+- add_grand_total()               # Grand total row
+```
+
 **2. Infrastructure Decisions**
 - ✅ Upgraded to 8GB RAM on Fly.io (from 4GB)
 - ✅ Phase 3 cost target ACHIEVED: £30/month (Neon + Fly.io)
 - ✅ RAM options evaluated (8GB/16GB/32GB)
+- ✅ Phase 1 cost: ~£40/month (AWS RDS + Fly.io)
+- ✅ Phase 3 cost: ~£30/month (Neon + Fly.io) - IDEAL TARGET MET!
 
 **3. Weekly Report Analysis**
 - ✅ Analyzed Power BI Weekly Report PDF (12 pages)
 - ✅ Identified core report structure (Page 2: YoY comparison matrix)
 - ✅ Mapped metrics: Weekly Sales, 4W Avg, Order Volumes, ATV
 - ✅ Documented conditional formatting requirements (RED/GREEN bars)
+- ✅ Power BI benchmark values extracted for FY26 Week 4:
+  - Meadowhall: £8,894 sales, 1,155 orders, £7.70 ATV
+  - The O2: £8,737 sales, 933 orders, £9.36 ATV
+  - Westfield: £18,629 sales, 2,282 orders, £8.16 ATV
 
 **4. Reverse-Engineered Calculations**
-- ⚠️ Built KPI calculations based on standard BI logic (NOT DAX yet)
-- ⚠️ Assumptions made about aggregation logic
+- ✅ Built KPI calculations based on standard BI logic (NOT DAX yet)
+- ✅ Assumptions documented:
+  - Weekly Sales = SUM(Net_Sales_Actual) for fiscal week
+  - 4W Avg = AVG(weekly sales) for last 4 weeks
+  - Order Volumes = COUNT(DISTINCT Order_Number)
+  - ATV = Total Sales / Order Count
+  - YoY Variance = (Current - Last) / Last
 - ⚠️ NEEDS VALIDATION against actual Power BI DAX measures
 
-### 🔄 IN PROGRESS
+**5. Project Organization**
+- ✅ Created `scripts/` directory for test/utility files
+- ✅ Moved all test scripts to `scripts/`:
+  - `test_weekly_report.py` - Weekly report validation
+  - `test_schema.py` - Database schema testing
+  - `check_env.py`, `debug_schema.py` - Utilities
+  - `fetch_sample_data.py`, `export_sample.py` - Data exports
+- ✅ Cleaner project root structure
 
-**Next Steps:**
-1. **CRITICAL**: Get DAX measure examples from Power BI for validation
-2. Test KPI calculator with sample data
-3. Validate calculations against Power BI report outputs
-4. Build Streamlit UI for Weekly Report page
-5. Add conditional formatting (RED/GREEN bars)
-6. Implement drill-down functionality
+### 🔄 IN PROGRESS (Paused - Debugging)
+
+**Current State: Testing KPI Calculator**
+
+Created `scripts/test_weekly_report.py` to validate calculations against Power BI report.
+
+**Issues Encountered & Fixed:**
+1. ✅ Unicode encoding errors on Windows console (checkmarks/symbols)
+   - Solution: Replaced with ASCII alternatives ([OK], PASS/FAIL)
+2. ✅ Polars table display Unicode box-drawing characters
+   - Solution: Skipped dataframe previews to avoid encoding issues
+3. ✅ `map_dict()` doesn't exist in Polars
+   - Solution: Changed to `.replace()` method
+4. ✅ Data type mismatch (Int32 vs Int64)
+   - Solution: Changed fiscal calendar return types to Int64
+5. 🔄 **CURRENT ISSUE**: Join column conflicts when combining metrics
+   - Error: `column with name 'Company_right' already exists`
+   - Attempted fix: Changed to `how='full'` with `coalesce=True`
+   - Status: NEEDS TESTING
+
+**Exact Stopping Point:**
+- File: `src/core/kpi_calculator.py` line 523-549
+- Function: `calculate_weekly_report()` - join logic
+- Next action: Run `python scripts/test_weekly_report.py` to verify fix
+
+**What Works:**
+- ✅ Data loading (100 rows sample CSV)
+- ✅ Company mapping
+- ✅ 7AM cutoff and fiscal calendar calculations
+- ✅ Individual metric calculations (weekly sales, 4W avg, volumes, ATV)
+
+**What Needs Testing:**
+- 🔄 Joining all metrics into single report
+- 🔄 Company totals aggregation
+- 🔄 Grand total calculation
+- 🔄 Comparison with Power BI values
+
+**Next Steps for Tomorrow:**
+1. **IMMEDIATE**: Test fixed join logic in `calculate_weekly_report()`
+2. Verify calculations match Power BI report (FY26 Week 4)
+3. Fix any remaining discrepancies
+4. **CRITICAL**: Get actual DAX measures from Power BI for validation
+5. Document differences between our logic and Power BI DAX
+6. Build Streamlit UI for Weekly Report page
+7. Add conditional formatting (RED/GREEN bars)
 
 ### ⏳ NEXT STEPS - Phase 1B: Build KPI Calculator
 
@@ -466,5 +534,13 @@ Claude will automatically read this file and understand the full context!
 
 ---
 
-**Last Updated:** Nov 8, 2025 - Session 4
-**Next Session:** Validate KPI calculations with DAX measures, build Streamlit Weekly Report UI
+**Last Updated:** Nov 8, 2025 - Session 4 (Evening - Paused during debugging)
+**Next Session:** Fix join logic in KPI calculator, validate against Power BI report, get DAX measures
+
+**Session 4 Summary:**
+- Built complete KPI calculator (690 lines)
+- Reverse-engineered calculations from Power BI report
+- Infrastructure: Upgraded to 8GB RAM, £30/month Phase 3 target achieved
+- Started testing with sample data - debugging Polars join issues
+- Organized project: moved test files to scripts/ directory
+- **Status**: Paused at join logic debugging - ready to resume testing tomorrow

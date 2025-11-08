@@ -77,9 +77,9 @@ def add_company_column(df: pl.DataFrame) -> pl.DataFrame:
     if 'Establishment' not in df.columns:
         raise ValueError("DataFrame must have 'Establishment' column")
 
-    # Create mapping expression
+    # Create mapping expression using replace
     return df.with_columns([
-        pl.col('Establishment').map_dict(COMPANY_MAPPING, default="UNKNOWN").alias('Company')
+        pl.col('Establishment').replace(COMPANY_MAPPING, default="UNKNOWN").alias('Company')
     ])
 
 
@@ -134,12 +134,12 @@ def prepare_transaction_data(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns([
         pl.col('Adjusted_Order_Date').map_elements(
             lambda d: get_fiscal_year(d) if d else None,
-            return_dtype=pl.Int32
+            return_dtype=pl.Int64
         ).alias('Fiscal_Year'),
 
         pl.col('Adjusted_Order_Date').map_elements(
             lambda d: get_fiscal_week(d) if d else None,
-            return_dtype=pl.Int32
+            return_dtype=pl.Int64
         ).alias('Fiscal_Week')
     ])
 
@@ -521,24 +521,31 @@ def calculate_weekly_report(
     atv = calculate_atv(prepared_df, fiscal_year, fiscal_week)
 
     # Join all metrics together
+    # Start with weekly sales as base
     result = weekly_sales
 
+    # Join 4-week avg
     result = result.join(
         four_week_avg,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='full',  # Full outer join
+        coalesce=True  # Merge join keys
     )
 
+    # Join volumes
     result = result.join(
         volumes,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='full',
+        coalesce=True
     )
 
+    # Join ATV
     result = result.join(
         atv,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='full',
+        coalesce=True
     )
 
     # Fill nulls with 0
