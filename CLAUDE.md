@@ -265,13 +265,86 @@ casualhero/
 - ✅ Initial commit pushed
 - ✅ All foundational code in version control
 
+**5. Sample Data Export**
+- ✅ Exported 100 rows from `mv_item_details` to CSV
+- ✅ Verified data structure and column names
+- ✅ Confirmed drilldown and export requirements
+
+### ✅ COMPLETED (Session 3 - Nov 5, 2025)
+
+**1. Hosting Platform Decision**
+- ✅ Evaluated 5 hosting options (Streamlit Cloud, Fly.io, Railway, Render, Digital Ocean)
+- ✅ Analyzed RAM requirements for drilldown + export features
+- ✅ **DECISION: Fly.io with 4GB RAM, always-on** (~£20-25/month)
+- ✅ Documented rationale in Key Decisions section
+- ✅ Phase 3 total cost estimate: ~£35/month (within budget)
+
+**2. Power BI Dashboard Analysis**
+- ✅ Analyzed Weekly Report.pdf (12 pages)
+- ✅ Identified branding: Pink/pastel theme with Snowflake logo
+- ✅ Documented Page 2 structure: YoY comparison matrix with 4 metric sections
+- ✅ Identified interactive requirements: drill-down, data bars, conditional formatting
+- ✅ **GOAL: Build "better than Power BI" with enhanced interactivity**
+
+**3. Dashboard Requirements Identified**
+
+**Page 2 - Weekly Report Table:**
+- Multi-level grouping: Company → Establishment → Metrics
+- 4 metric sections: Weekly Sales, 4W Avg, Order Volumes, ATV
+- YoY comparisons with variance percentages
+- Conditional formatting: RED/GREEN data bars
+- Currency formatting, percentage formatting
+- Hierarchical totals and subtotals
+
+**Interactive Enhancements Beyond Power BI:**
+- Click-to-expand drill-down (Company → Establishment → Daily → Transactions)
+- Real-time filtering (week slider, company toggles, search)
+- Smart insights panel (auto-detect patterns, alerts)
+- Export filtered data at any drill level
+- KPI cards with sparklines
+- Animated transitions
+- Mobile responsive
+- Comparison mode (any two periods)
+- Heatmap view option
+
+### ✅ COMPLETED (Session 4 - Nov 8, 2025)
+
+**1. KPI Calculator Module** (`src/core/kpi_calculator.py`)
+- ✅ Complete KPI calculation engine built (690 lines)
+- ✅ Weekly Sales calculations (Current Year, Last Year, YoY variance)
+- ✅ 4-Week Average calculations with rolling window logic
+- ✅ Order Volume calculations (unique order count, not line items)
+- ✅ ATV (Average Transaction Value) calculations
+- ✅ Company mapping (SNOWFLAKE, STRT SND, SKYVIEW)
+- ✅ Hierarchical aggregation (Establishment → Company → Grand Total)
+- ✅ Data preparation pipeline with fiscal calendar integration
+- ✅ Production-ready: type hints, docstrings, error handling
+
+**2. Infrastructure Decisions**
+- ✅ Upgraded to 8GB RAM on Fly.io (from 4GB)
+- ✅ Phase 3 cost target ACHIEVED: £30/month (Neon + Fly.io)
+- ✅ RAM options evaluated (8GB/16GB/32GB)
+
+**3. Weekly Report Analysis**
+- ✅ Analyzed Power BI Weekly Report PDF (12 pages)
+- ✅ Identified core report structure (Page 2: YoY comparison matrix)
+- ✅ Mapped metrics: Weekly Sales, 4W Avg, Order Volumes, ATV
+- ✅ Documented conditional formatting requirements (RED/GREEN bars)
+
+**4. Reverse-Engineered Calculations**
+- ⚠️ Built KPI calculations based on standard BI logic (NOT DAX yet)
+- ⚠️ Assumptions made about aggregation logic
+- ⚠️ NEEDS VALIDATION against actual Power BI DAX measures
+
 ### 🔄 IN PROGRESS
 
 **Next Steps:**
-1. Get DAX measure examples from Power BI
-2. Get Power BI dashboard screenshots
-3. Build KPI calculator module
-4. Start Streamlit UI development
+1. **CRITICAL**: Get DAX measure examples from Power BI for validation
+2. Test KPI calculator with sample data
+3. Validate calculations against Power BI report outputs
+4. Build Streamlit UI for Weekly Report page
+5. Add conditional formatting (RED/GREEN bars)
+6. Implement drill-down functionality
 
 ### ⏳ NEXT STEPS - Phase 1B: Build KPI Calculator
 
@@ -344,6 +417,26 @@ Test cases needed:
    - .env.example provides template
    - AWS connection should use read-only database user
 
+5. **Fly.io for Deployment (8GB RAM, Always-On)**
+   - Chosen over Streamlit Community Cloud for drilldown + export capabilities
+   - 8GB RAM handles large exports and transaction-level drilldowns with headroom
+   - London region (lhr) for low latency to AWS RDS
+   - Always-on configuration (no auto-sleep)
+   - Cost: ~£20/month for 8GB VM
+   - Phase 3 total: ~£30/month (Fly.io + Neon) - MEETS IDEAL TARGET!
+
+   **RAM Options Evaluated:**
+   - 8GB: £20/month (chosen - hits £30 target in Phase 3)
+   - 16GB: £40/month (overkill for current needs)
+   - 32GB: £80/month (at budget limit)
+
+   **Why Fly.io over Streamlit Cloud:**
+   - ✅ 8GB RAM vs 2GB (no export size limits needed)
+   - ✅ UK-based hosting (lower latency to databases)
+   - ✅ Full control over resources and scaling
+   - ✅ Docker-based (better for complex deployments)
+   - ⚠️ Requires Docker configuration (more complex than Streamlit Cloud)
+
 ### Business Context
 - Customer: Snowflake Gelato (15 locations)
 - Good relationship, low-risk trial
@@ -373,5 +466,5 @@ Claude will automatically read this file and understand the full context!
 
 ---
 
-**Last Updated:** Nov 5, 2025 - Session 2
-**Next Session:** Get DAX measures and Power BI screenshots, build KPI calculator
+**Last Updated:** Nov 8, 2025 - Session 4
+**Next Session:** Validate KPI calculations with DAX measures, build Streamlit Weekly Report UI
