@@ -16,10 +16,34 @@ Key Functions:
     - get_week1_start: Get Week 1 start date for a fiscal year
     - get_fiscal_year: Determine fiscal year for any date
     - get_fiscal_week: Calculate fiscal week number (1-52/53)
+    - calculate_default_week1_start: Calculate default Week 1 if no override exists
 
 Configuration:
-    Fiscal year Week 1 start dates are defined in:
-    config/fiscal_overrides.yaml
+    Current (Phase 1):
+        Fiscal year Week 1 start dates are defined in:
+        config/fiscal_overrides.yaml
+
+    Future (Phase 2 - Database Migration):
+        Fiscal overrides will move to a PostgreSQL table:
+        - Table: fiscal_calendar_overrides
+        - Columns: fiscal_year (INT), week1_start (DATE), created_at, updated_by
+        - Users with elevated privileges can edit via UI
+        - Priority: Database > YAML > Calculated Default
+        - YAML config remains as fallback for new installations
+
+Default Calculation Logic:
+    If no override is configured, Week 1 start is calculated as:
+    - Find October 1 of (fiscal_year - 1)
+    - Week 1 starts on the Monday of the week containing Oct 1
+    - This matches the pattern observed in existing overrides
+
+Migration Notes:
+    When moving to database-backed overrides:
+    1. Create fiscal_calendar_overrides table
+    2. Seed with existing YAML data
+    3. Update get_week1_start() to query database first
+    4. Add UI for privileged users to edit overrides
+    5. Keep YAML as fallback/default config
 """
 
 from datetime import date, datetime, timedelta
@@ -97,6 +121,63 @@ _FISCAL_OVERRIDES: Dict[int, date] = _load_fiscal_config()
 
 
 # ============================================================================
+# Default Fiscal Year Logic
+# ============================================================================
+
+def calculate_default_week1_start(fiscal_year: int) -> date:
+    """
+    Calculate default Week 1 start date if no override is configured.
+
+    Default Logic:
+        - Fiscal year conceptually starts October 1
+        - Week 1 starts on the Monday of the week containing October 1
+        - Weeks are Monday-Sunday
+
+    Algorithm:
+        1. Find October 1 of the calendar year (fiscal_year - 1)
+           Example: FY2024 → Oct 1, 2023
+        2. Find which Monday-Sunday week it falls in
+        3. Use that Monday as Week 1 start
+
+    Args:
+        fiscal_year: The fiscal year (e.g., 2025 for FY2025)
+
+    Returns:
+        Monday date when Week 1 would start (calculated, not configured)
+
+    Examples:
+        >>> # FY2024: Oct 1, 2023 is Sunday → Week 1 starts Oct 2 (Monday)
+        >>> calculate_default_week1_start(2024)
+        date(2023, 10, 2)
+
+        >>> # FY2025: Oct 1, 2024 is Tuesday → Week 1 starts Sep 30 (Monday)
+        >>> calculate_default_week1_start(2025)
+        date(2024, 9, 30)
+
+        >>> # FY2026: Oct 1, 2025 is Wednesday → Week 1 starts Sep 29 (Monday)
+        >>> calculate_default_week1_start(2026)
+        date(2025, 9, 29)
+
+    Note:
+        This is a fallback calculation. Prefer explicit configuration in
+        fiscal_overrides.yaml (or database in future) for production use.
+    """
+    # October 1 of the calendar year before fiscal year
+    oct_1 = date(fiscal_year - 1, 10, 1)
+
+    # Find what day of week Oct 1 falls on (Monday=0, Sunday=6)
+    weekday = oct_1.weekday()
+
+    if weekday == 6:  # Sunday
+        # Week 1 starts next day (Monday)
+        return oct_1 + timedelta(days=1)
+    else:
+        # Week 1 starts on the Monday of this week
+        # Go back to Monday (subtract weekday value)
+        return oct_1 - timedelta(days=weekday)
+
+
+# ============================================================================
 # Public API Functions
 # ============================================================================
 
@@ -134,39 +215,78 @@ def adjust_for_cutoff(timestamp: datetime, cutoff_hour: int = 7) -> date:
     return timestamp.date()
 
 
-def get_week1_start(fiscal_year: int) -> date:
+def get_week1_start(fiscal_year: int, use_default: bool = True) -> date:
     """
     Get the Week 1 start date for a specific fiscal year.
 
-    This function looks up the configured Week 1 start date from the
-    fiscal_overrides.yaml configuration file. No logic is applied -
-    dates are purely configuration-driven.
+    This function first checks for a configured override in fiscal_overrides.yaml.
+    If no override exists and use_default=True, it calculates a default Week 1
+    start based on the Monday of the week containing October 1.
+
+    Priority:
+        1. Configured override in fiscal_overrides.yaml (YAML config)
+        2. [FUTURE] Database override (when migration complete)
+        3. Calculated default (if use_default=True)
+        4. Error (if use_default=False and no override)
 
     Args:
         fiscal_year: The fiscal year (e.g., 2025 for FY2025)
+        use_default: If True, calculate default when no override exists (default: True)
+                     If False, raise error when no override exists
 
     Returns:
         Monday date when Week 1 starts for the given fiscal year
 
     Raises:
-        ValueError: If fiscal year is not defined in configuration
+        ValueError: If fiscal year is not configured and use_default=False
 
     Examples:
+        >>> # FY2025 is configured in YAML
         >>> get_week1_start(2025)
         date(2024, 9, 30)
 
-        >>> get_week1_start(2024)
-        date(2023, 10, 2)
+        >>> # FY2027 not configured, uses calculated default
+        >>> get_week1_start(2027)
+        date(2026, 9, 28)
+
+        >>> # FY2027 not configured, error because use_default=False
+        >>> get_week1_start(2027, use_default=False)
+        ValueError: Fiscal year 2027 not configured...
+
+    Note:
+        FUTURE MIGRATION: This function will be updated to check a database
+        table before falling back to YAML config. Users with elevated privileges
+        will be able to edit overrides via the UI, which will update the database.
     """
-    if fiscal_year not in _FISCAL_OVERRIDES:
+    # Check for configured override
+    if fiscal_year in _FISCAL_OVERRIDES:
+        return _FISCAL_OVERRIDES[fiscal_year]
+
+    # No override found
+    if use_default:
+        # Calculate default Week 1 start
+        return calculate_default_week1_start(fiscal_year)
+    else:
+        # Strict mode - require explicit configuration
         available_years = sorted(_FISCAL_OVERRIDES.keys())
         raise ValueError(
             f"Fiscal year {fiscal_year} not configured in fiscal_overrides.yaml. "
             f"Available years: {available_years}. "
-            f"Please add FY{fiscal_year} to the configuration."
+            f"Please add FY{fiscal_year} to the configuration or set use_default=True."
         )
 
-    return _FISCAL_OVERRIDES[fiscal_year]
+    # TODO: FUTURE DATABASE MIGRATION
+    # When fiscal overrides move to database:
+    # 1. Check database for override first (highest priority)
+    # 2. Fall back to YAML config if not in database
+    # 3. Fall back to calculated default if use_default=True
+    # 4. Raise error if use_default=False
+    #
+    # Example future code:
+    # override = db.query("SELECT week1_start FROM fiscal_overrides WHERE fiscal_year = ?", fiscal_year)
+    # if override:
+    #     return override.week1_start
+    # ... rest of current logic
 
 
 def get_fiscal_year(target_date: date) -> int:

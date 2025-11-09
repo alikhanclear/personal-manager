@@ -387,6 +387,89 @@ def get_sample_data(limit: int = 10) -> pl.DataFrame:
 
 
 # ============================================================================
+# Production Query Functions (Phase 1 - AWS PostgreSQL)
+# ============================================================================
+
+def query_all_transactions(db, years: int = 5) -> pl.DataFrame:
+    """
+    Query all transaction data from mv_item_details for the last N years.
+
+    This is the main function for loading data in production.
+    Used by Streamlit app with 24-hour caching.
+
+    Args:
+        db: Database connection instance from get_db()
+        years: Number of fiscal years to load (default: 5)
+
+    Returns:
+        Polars DataFrame with transaction-level data
+
+    Example:
+        >>> from src.data.connector import get_db
+        >>> db = get_db()
+        >>> df = query_all_transactions(db, years=5)
+        >>> print(f"Loaded {len(df):,} rows")
+    """
+    from datetime import datetime, timedelta
+    from src.core.fiscal_calendar import get_fiscal_year, get_week1_start
+
+    # Calculate date range
+    # Get current fiscal year
+    today = datetime.now().date()
+    current_fy = get_fiscal_year(today)
+
+    # Go back N years
+    oldest_fy = current_fy - years + 1
+
+    # Get start date (Week 1 of oldest fiscal year)
+    start_date = get_week1_start(oldest_fy)
+
+    # Get end date (today)
+    end_date = today
+
+    # Build query with payment status filter
+    # Include ONLY 'captured' and 'authorized' payments (matches Power BI logic)
+    query = """
+        SELECT
+            mv."Establishment",
+            mv."Order_Number",
+            mv."Order_Date",
+            mv."Clean_Product_Name",
+            mv."Clean_Class",
+            mv."Total_Sales_Actual",
+            mv."Net_Sales_Actual",
+            mv."Product_Quantity",
+            mv."Total_Product_Tax",
+            mv."Eat_In_Or_Take_Away",
+            mv."Product Type",
+            COALESCE(p."Status", 'UNKNOWN') AS "Payment_Status"
+        FROM public.mv_item_details AS mv
+        INNER JOIN (
+            SELECT DISTINCT
+                "Order Id",
+                "Status"
+            FROM public."PaymentDetails"
+            WHERE LOWER("Status") IN ('captured', 'authorized')
+        ) p
+        ON p."Order Id" = mv."Order_Number"
+        WHERE mv."Order_Date" >= :start_date
+          AND mv."Order_Date" <= :end_date
+        ORDER BY mv."Order_Date", mv."Order_Number"
+    """
+
+    # Execute query
+    with db.get_connection() as conn:
+        # Use pl.read_database for direct PostgreSQL → Polars
+        df = pl.read_database(
+            query,
+            connection=conn,
+            execute_options={"parameters": {"start_date": start_date, "end_date": end_date}}
+        )
+
+    return df
+
+
+# ============================================================================
 # Module Testing
 # ============================================================================
 

@@ -22,6 +22,9 @@
 # ============================================================================
 
 fiscal_overrides:
+  2021: "2020-09-28"  # Oct 1, 2020 was Thursday → Week 1 starts Monday Sep 28
+  2022: "2021-09-27"  # Oct 1, 2021 was Friday → Week 1 starts Monday Sep 27
+  2023: "2022-09-26"  # Oct 1, 2022 was Saturday → Week 1 starts Monday Sep 26
   2024: "2023-10-02"  # Oct 1, 2023 was Sunday → Week 1 starts Monday Oct 2
   2025: "2024-09-30"  # Oct 1, 2024 was Tuesday → Week 1 starts Monday Sep 30
   2026: "2025-09-29"  # Oct 1, 2025 was Wednesday → Week 1 starts Monday Sep 29

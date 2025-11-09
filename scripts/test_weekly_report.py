@@ -5,6 +5,13 @@ Reproduces the Power BI Weekly Report (Page 2) using our KPI calculator.
 Compares results against actual Power BI values.
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import polars as pl
 from src.core.kpi_calculator import (
     calculate_weekly_report,
@@ -13,12 +20,12 @@ from src.core.kpi_calculator import (
 )
 
 print("="*100)
-print("WEEKLY REPORT REPRODUCTION TEST - FY26 Week 4 (20 Oct - 26 Oct)")
+print("WEEKLY REPORT REPRODUCTION TEST - FY26 Week 4")
 print("="*100)
 
-# Load sample data
-print("\n[Step 1] Loading sample data...")
-df = pl.read_csv('sample_data_100_rows.csv')
+# Load test data
+print("\n[Step 1] Loading test data...")
+df = pl.read_csv('test_data_fy26_week4.csv')
 print(f"[OK] Loaded {len(df)} rows")
 print(f"[OK] Columns: {df.columns}")
 

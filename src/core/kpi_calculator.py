@@ -113,6 +113,11 @@ def prepare_transaction_data(df: pl.DataFrame) -> pl.DataFrame:
         - Order_Net_Sales: Total net sales for the order
         - Order_Item_Count: Number of items in the order
     """
+    # Check if data is already prepared (idempotent operation)
+    if 'Fiscal_Year' in df.columns and 'Adjusted_Order_Date' in df.columns:
+        # Data already prepared, return as-is
+        return df
+
     # Add Company column
     df = add_company_column(df)
 
@@ -217,24 +222,25 @@ def calculate_weekly_sales(
     result = current_year_sales.join(
         last_year_sales,
         on=['Company', 'Establishment'],
-        how='outer'  # Keep all establishments even if no data in one year
+        how='outer',  # Keep all establishments even if no data in one year
+        coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance percentage
+    # Calculate variance percentage (safe division - avoid divide by zero)
+    # Replace zeros with null to prevent division by zero
+    result = result.with_columns([
+        pl.when(pl.col('Last_Year_Sales') == 0)
+        .then(None)
+        .otherwise(pl.col('Last_Year_Sales'))
+        .alias('Last_Year_Sales_Safe')
+    ])
+
     result = result.with_columns([
         (
             (pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) /
-            pl.col('Last_Year_Sales')
+            pl.col('Last_Year_Sales_Safe')
         ).alias('Weekly_Sales_Var_Pct')
-    ])
-
-    # Replace inf/-inf with null (division by zero)
-    result = result.with_columns([
-        pl.when(pl.col('Weekly_Sales_Var_Pct').is_infinite())
-        .then(None)
-        .otherwise(pl.col('Weekly_Sales_Var_Pct'))
-        .alias('Weekly_Sales_Var_Pct')
-    ])
+    ]).drop('Last_Year_Sales_Safe')
 
     return result
 
@@ -248,11 +254,12 @@ def calculate_4week_avg(
     Calculate 4-week rolling average sales by Company and Establishment.
 
     Calculates average for the 4 weeks ending with the target week.
+    Crosses fiscal year boundaries when needed (e.g., Week 1-3).
 
     Args:
         df: Prepared transaction data
         fiscal_year: Target fiscal year
-        fiscal_week: Target fiscal week (must be >= 4)
+        fiscal_week: Target fiscal week
 
     Returns:
         DataFrame with columns:
@@ -266,22 +273,79 @@ def calculate_4week_avg(
     week_start = fiscal_week - 3
     week_end = fiscal_week
 
+    # Handle cross-year boundaries (Week 1, 2, 3)
     if week_start < 1:
-        raise ValueError(f"Fiscal week {fiscal_week} < 4. Need at least 4 weeks of data.")
+        # Need weeks from previous fiscal year
+        weeks_needed_from_prev_fy = abs(week_start - 1) + 1  # How many weeks to pull from prev FY
 
-    # Filter to last 4 weeks (current year)
-    current_year_df = df.filter(
-        (pl.col('Fiscal_Year') == fiscal_year) &
-        (pl.col('Fiscal_Week') >= week_start) &
-        (pl.col('Fiscal_Week') <= week_end)
-    )
+        # Get max week number from previous FY (could be 52 or 53)
+        prev_fy_max_week = df.filter(
+            pl.col('Fiscal_Year') == fiscal_year - 1
+        )['Fiscal_Week'].max()
 
-    # Filter to same 4 weeks last year
-    last_year_df = df.filter(
-        (pl.col('Fiscal_Year') == fiscal_year - 1) &
-        (pl.col('Fiscal_Week') >= week_start) &
-        (pl.col('Fiscal_Week') <= week_end)
-    )
+        if prev_fy_max_week is None:
+            prev_fy_max_week = 52  # Default to 52 if no data
+
+        # Get weeks from previous FY (last N weeks)
+        prev_fy_week_start = prev_fy_max_week - weeks_needed_from_prev_fy + 1
+
+        # Current year: weeks 1 to target week
+        current_year_df_this_fy = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year) &
+            (pl.col('Fiscal_Week') >= 1) &
+            (pl.col('Fiscal_Week') <= week_end)
+        )
+
+        # Previous FY: last N weeks
+        current_year_df_prev_fy = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year - 1) &
+            (pl.col('Fiscal_Week') >= prev_fy_week_start) &
+            (pl.col('Fiscal_Week') <= prev_fy_max_week)
+        )
+
+        # Combine both
+        current_year_df = pl.concat([current_year_df_prev_fy, current_year_df_this_fy])
+
+        # Same logic for last year (fiscal_year - 1 becomes fiscal_year - 2)
+        last_year_df_this_fy = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year - 1) &
+            (pl.col('Fiscal_Week') >= 1) &
+            (pl.col('Fiscal_Week') <= week_end)
+        )
+
+        # Get max week from fiscal_year - 2
+        two_years_ago_max_week = df.filter(
+            pl.col('Fiscal_Year') == fiscal_year - 2
+        )['Fiscal_Week'].max()
+
+        if two_years_ago_max_week is None:
+            two_years_ago_max_week = 52
+
+        two_years_ago_week_start = two_years_ago_max_week - weeks_needed_from_prev_fy + 1
+
+        last_year_df_prev_fy = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year - 2) &
+            (pl.col('Fiscal_Week') >= two_years_ago_week_start) &
+            (pl.col('Fiscal_Week') <= two_years_ago_max_week)
+        )
+
+        last_year_df = pl.concat([last_year_df_prev_fy, last_year_df_this_fy])
+
+    else:
+        # Normal case: all 4 weeks within same fiscal year
+        # Filter to last 4 weeks (current year)
+        current_year_df = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year) &
+            (pl.col('Fiscal_Week') >= week_start) &
+            (pl.col('Fiscal_Week') <= week_end)
+        )
+
+        # Filter to same 4 weeks last year
+        last_year_df = df.filter(
+            (pl.col('Fiscal_Year') == fiscal_year - 1) &
+            (pl.col('Fiscal_Week') >= week_start) &
+            (pl.col('Fiscal_Week') <= week_end)
+        )
 
     # Aggregate by Company, Establishment, Week for current year
     current_year_weekly = current_year_df.group_by([
@@ -310,24 +374,24 @@ def calculate_4week_avg(
     result = current_year_avg.join(
         last_year_avg,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='outer',
+        coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance
+    # Calculate variance (safe division - avoid divide by zero)
+    result = result.with_columns([
+        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        .then(None)
+        .otherwise(pl.col('Last_Year_4W_Avg'))
+        .alias('Last_Year_4W_Avg_Safe')
+    ])
+
     result = result.with_columns([
         (
             (pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) /
-            pl.col('Last_Year_4W_Avg')
+            pl.col('Last_Year_4W_Avg_Safe')
         ).alias('FourWeek_Avg_Var_Pct')
-    ])
-
-    # Replace inf/-inf with null
-    result = result.with_columns([
-        pl.when(pl.col('FourWeek_Avg_Var_Pct').is_infinite())
-        .then(None)
-        .otherwise(pl.col('FourWeek_Avg_Var_Pct'))
-        .alias('FourWeek_Avg_Var_Pct')
-    ])
+    ]).drop('Last_Year_4W_Avg_Safe')
 
     return result
 
@@ -378,24 +442,24 @@ def calculate_order_volumes(
     result = current_year_vol.join(
         last_year_vol,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='outer',
+        coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance
+    # Calculate variance (safe division - avoid divide by zero)
+    result = result.with_columns([
+        pl.when(pl.col('Last_Year_Vol') == 0)
+        .then(None)
+        .otherwise(pl.col('Last_Year_Vol'))
+        .alias('Last_Year_Vol_Safe')
+    ])
+
     result = result.with_columns([
         (
             (pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) /
-            pl.col('Last_Year_Vol')
+            pl.col('Last_Year_Vol_Safe')
         ).alias('Volume_Var_Pct')
-    ])
-
-    # Replace inf/-inf with null
-    result = result.with_columns([
-        pl.when(pl.col('Volume_Var_Pct').is_infinite())
-        .then(None)
-        .otherwise(pl.col('Volume_Var_Pct'))
-        .alias('Volume_Var_Pct')
-    ])
+    ]).drop('Last_Year_Vol_Safe')
 
     return result
 
@@ -448,24 +512,24 @@ def calculate_atv(
     result = current_year_atv.join(
         last_year_atv,
         on=['Company', 'Establishment'],
-        how='outer'
+        how='outer',
+        coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance
+    # Calculate variance (safe division - avoid divide by zero)
+    result = result.with_columns([
+        pl.when(pl.col('Last_Year_ATV') == 0)
+        .then(None)
+        .otherwise(pl.col('Last_Year_ATV'))
+        .alias('Last_Year_ATV_Safe')
+    ])
+
     result = result.with_columns([
         (
             (pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) /
-            pl.col('Last_Year_ATV')
+            pl.col('Last_Year_ATV_Safe')
         ).alias('ATV_Var_Pct')
-    ])
-
-    # Replace inf/-inf with null
-    result = result.with_columns([
-        pl.when(pl.col('ATV_Var_Pct').is_infinite())
-        .then(None)
-        .otherwise(pl.col('ATV_Var_Pct'))
-        .alias('ATV_Var_Pct')
-    ])
+    ]).drop('Last_Year_ATV_Safe')
 
     return result
 
@@ -525,27 +589,26 @@ def calculate_weekly_report(
     result = weekly_sales
 
     # Join 4-week avg
+    # NOTE: All metric functions use coalesce=True in their internal joins,
+    # so no _right suffix columns exist. Direct join is clean.
     result = result.join(
         four_week_avg,
         on=['Company', 'Establishment'],
-        how='full',  # Full outer join
-        coalesce=True  # Merge join keys
+        how='left'
     )
 
     # Join volumes
     result = result.join(
         volumes,
         on=['Company', 'Establishment'],
-        how='full',
-        coalesce=True
+        how='left'
     )
 
     # Join ATV
     result = result.join(
         atv,
         on=['Company', 'Establishment'],
-        how='full',
-        coalesce=True
+        how='left'
     )
 
     # Fill nulls with 0
@@ -605,6 +668,9 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
         pl.lit("Total").alias('Establishment')
     ])
 
+    # Reorder columns to match original DataFrame
+    company_totals = company_totals.select(df.columns)
+
     # Combine with original data
     result = pl.concat([df, company_totals]).sort(['Company', 'Establishment'])
 
@@ -646,6 +712,9 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
         pl.lit("Total").alias('Company'),
         pl.lit("").alias('Establishment')
     ])
+
+    # Reorder columns to match original DataFrame
+    grand_total = grand_total.select(df.columns)
 
     # Append to result
     result = pl.concat([df, grand_total])

@@ -27,3 +27,9 @@ pytest-cov>=4.1.0           # Test coverage reports
 
 # Utilities
 python-dotenv>=1.0.0        # Environment variable management (.env files)
+requests>=2.31.0            # HTTP requests (for cache warmer)
+streamlit-aggrid==1.2.0.post1
+perspective-python==4.0.0
+matplotlib==3.10.7
+dash==3.2.0
+dash-bootstrap-components==2.0.4

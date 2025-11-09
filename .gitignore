@@ -209,4 +209,7 @@ __pycache__/
 docs/_build/
 docs/.doctrees/
 
+# Archived/deprecated code
+archive/
+
 # ============================================================================
