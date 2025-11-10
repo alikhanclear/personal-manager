@@ -670,12 +670,28 @@ Claude will automatically read this file and understand the full context!
 
 ---
 
-**Last Updated:** Nov 9, 2025 - Session 5 (MAJOR MILESTONE: Dash Migration Complete!)
-**Next Session:** User testing of Dash Weekly Report → Monthly Report implementation
+**Last Updated:** Nov 10, 2025 - Session 6 (Database Query Optimization & Production Fix!)
+**Next Session:** Monthly Report implementation → Deployment to Fly.io
+
+**Session 6 Summary:**
+- **CRITICAL FIX**: Resolved AWS database timeout issues
+- **Problem**: Original INNER JOIN query was taking 2+ hours and timing out
+- **Solution**: Split-query approach - load data separately, join in Polars
+  - Query 1: Get transactions from `mv_item_details` (fast, simple)
+  - Query 2: Get payment statuses from `PaymentDetails` (fast, small table)
+  - Join + filter in Polars (much faster than PostgreSQL JOIN)
+- **Power BI Query Matching**: Replicated exact Power BI filtering logic
+  - LEFT JOIN (not INNER JOIN)
+  - Exclude 'denied' payments
+  - Keep only 'captured' and 'authorized' statuses
+- **Performance**: Load time reduced from 2+ hours → **30-90 seconds**
+- **Data Volume**: 1.66M transactions (5 fiscal years, filtered)
+- **Fixed Dash Debug Mode**: Disabled reloader to prevent double-loading
+- **Status**: ✅ PRODUCTION READY - Fast, reliable data loading
 
 **Session 5 Summary:**
 - **MAJOR MILESTONE**: Migrated from Streamlit to Dash
-- Created production-grade BI dashboard (dash_app.py - 492 lines)
+- Created production-grade BI dashboard (dash_app.py - 518 lines)
 - **Data bars implemented**: Power BI-style horizontal gradient bars
   - Positive variance: Green bars grow right from center
   - Negative variance: Red bars grow left from center
@@ -687,7 +703,7 @@ Claude will automatically read this file and understand the full context!
 - Archived old Streamlit code (moved to archive/)
 - **Status**: ✅ COMPLETE - User tested and approved
 
-**Previous Session 4 Summary:**
+**Session 4 Summary:**
 - Built complete KPI calculator (690 lines)
 - Reverse-engineered calculations from Power BI report
 - Infrastructure: Upgraded to 8GB RAM, £30/month Phase 3 target achieved

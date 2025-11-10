@@ -427,44 +427,65 @@ def query_all_transactions(db, years: int = 5) -> pl.DataFrame:
     # Get end date (today)
     end_date = today
 
-    # Build query with payment status filter
-    # Include ONLY 'captured' and 'authorized' payments (matches Power BI logic)
-    query = """
+    # Strategy: Split queries to avoid AWS timeout (Power BI logic in Polars)
+
+    print(f"  [Strategy] Loading data in 2 queries + join in Polars (faster than SQL JOIN)")
+
+    # Query 1: Get all transactions (fast - simple query)
+    transactions_query = """
         SELECT
-            mv."Establishment",
-            mv."Order_Number",
-            mv."Order_Date",
-            mv."Clean_Product_Name",
-            mv."Clean_Class",
-            mv."Total_Sales_Actual",
-            mv."Net_Sales_Actual",
-            mv."Product_Quantity",
-            mv."Total_Product_Tax",
-            mv."Eat_In_Or_Take_Away",
-            mv."Product Type",
-            COALESCE(p."Status", 'UNKNOWN') AS "Payment_Status"
-        FROM public.mv_item_details AS mv
-        INNER JOIN (
-            SELECT DISTINCT
-                "Order Id",
-                "Status"
-            FROM public."PaymentDetails"
-            WHERE LOWER("Status") IN ('captured', 'authorized')
-        ) p
-        ON p."Order Id" = mv."Order_Number"
-        WHERE mv."Order_Date" >= :start_date
-          AND mv."Order_Date" <= :end_date
-        ORDER BY mv."Order_Date", mv."Order_Number"
+            "Establishment",
+            "Order_Number",
+            "Order_Date",
+            "Clean_Product_Name",
+            "Clean_Class",
+            "Total_Sales_Actual",
+            "Net_Sales_Actual",
+            "Product_Quantity",
+            "Total_Product_Tax",
+            "Eat_In_Or_Take_Away",
+            "Product Type"
+        FROM public.mv_item_details
+        WHERE "Order_Date" >= :start_date
+          AND "Order_Date" <= :end_date
     """
 
-    # Execute query
+    # Query 2: Get payment statuses (fast - small table)
+    payments_query = """
+        SELECT DISTINCT
+            "Order Id" as "Order_Number",
+            "Status"
+        FROM public."PaymentDetails"
+    """
+
     with db.get_connection() as conn:
-        # Use pl.read_database for direct PostgreSQL → Polars
-        df = pl.read_database(
-            query,
+        print(f"  [Query 1/2] Fetching {(end_date - start_date).days / 365:.1f} years from mv_item_details...")
+        transactions_df = pl.read_database(
+            transactions_query,
             connection=conn,
             execute_options={"parameters": {"start_date": start_date, "end_date": end_date}}
         )
+        print(f"  [Query 1/2] ✓ Got {len(transactions_df):,} transactions")
+
+        print(f"  [Query 2/2] Fetching payment statuses...")
+        payments_df = pl.read_database(payments_query, connection=conn)
+        print(f"  [Query 2/2] ✓ Got {len(payments_df):,} payment records")
+
+    # Apply Power BI logic in Polars (much faster than SQL)
+    print(f"  [Filter] Applying Power BI filters (exclude denied, keep captured/authorized)...")
+
+    # LEFT JOIN + filter (matches Power BI exactly)
+    df = transactions_df.join(
+        payments_df,
+        on="Order_Number",
+        how="left"
+    ).filter(
+        # Exclude denied + only keep captured/authorized (Power BI logic)
+        (pl.col("Status").str.to_lowercase() != "denied") &
+        (pl.col("Status").str.to_lowercase().is_in(["captured", "authorized"]))
+    )
+
+    print(f"  [Filter] ✓ Filtered to {len(df):,} valid transactions")
 
     return df
 
