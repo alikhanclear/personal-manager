@@ -766,6 +766,14 @@ def update_weekly_report(fiscal_year, fiscal_week):
             df_pandas.loc[idx, 'Company'] = ''
         prev_company = current_company
 
+    # Create display columns for variance percentages with bracket notation for negatives
+    # Keep numeric columns for filtering, add text columns for display
+    variance_cols = ['Weekly_Sales_Var_Pct', 'FourWeek_Avg_Var_Pct', 'Volume_Var_Pct', 'ATV_Var_Pct']
+    for col in variance_cols:
+        df_pandas[f'{col}_Display'] = df_pandas[col].apply(
+            lambda x: f'({abs(x):.2f})' if x < 0 else f'{x:.2f}'
+        )
+
     # Create DataTable with conditional formatting
     table = dash_table.DataTable(
         data=df_pandas.to_dict('records'),
@@ -774,16 +782,21 @@ def update_weekly_report(fiscal_year, fiscal_week):
             {'name': 'Establishment', 'id': 'Establishment'},
             {'name': 'Current Year Sales', 'id': 'Current_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
             {'name': 'Last Year Sales', 'id': 'Last_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Sales Var %', 'id': 'Weekly_Sales_Var_Pct', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+            {'name': 'Sales Var %', 'id': 'Weekly_Sales_Var_Pct_Display', 'type': 'text'},
             {'name': 'Current 4W Avg', 'id': 'Current_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
             {'name': 'Last 4W Avg', 'id': 'Last_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': '4W Avg Var %', 'id': 'FourWeek_Avg_Var_Pct', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+            {'name': '4W Avg Var %', 'id': 'FourWeek_Avg_Var_Pct_Display', 'type': 'text'},
             {'name': 'Current Vol', 'id': 'Current_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
             {'name': 'Last Vol', 'id': 'Last_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Vol Var %', 'id': 'Volume_Var_Pct', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+            {'name': 'Vol Var %', 'id': 'Volume_Var_Pct_Display', 'type': 'text'},
             {'name': 'Current ATV', 'id': 'Current_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
             {'name': 'Last ATV', 'id': 'Last_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
-            {'name': 'ATV Var %', 'id': 'ATV_Var_Pct', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+            {'name': 'ATV Var %', 'id': 'ATV_Var_Pct_Display', 'type': 'text'},
+            # Hidden columns for filtering
+            {'name': '', 'id': 'Weekly_Sales_Var_Pct', 'hideable': True, 'hidden': True},
+            {'name': '', 'id': 'FourWeek_Avg_Var_Pct', 'hideable': True, 'hidden': True},
+            {'name': '', 'id': 'Volume_Var_Pct', 'hideable': True, 'hidden': True},
+            {'name': '', 'id': 'ATV_Var_Pct', 'hideable': True, 'hidden': True},
         ],
         style_table={'overflowX': 'auto'},
         style_cell={
@@ -801,7 +814,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
         },
         style_data_conditional=(
             # Data bars using diverging color scale (Power BI style)
-            # Bars are 31% height, bottom-aligned (right justified vertically)
+            # Bars are 41% height, centered vertically, text right-aligned
             # Green bars: #00B050 (positive variance), Red bars: #FF0000 (negative variance)
             # Text color: Black for all values
             # Create gradient bars for positive values (green on right side)
@@ -809,11 +822,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {i} && {{Weekly_Sales_Var_Pct}} < {i+5}',
-                        'column_id': 'Weekly_Sales_Var_Pct'
+                        'column_id': 'Weekly_Sales_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -822,11 +836,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {-i-5} && {{Weekly_Sales_Var_Pct}} < {-i}',
-                        'column_id': 'Weekly_Sales_Var_Pct'
+                        'column_id': 'Weekly_Sales_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -835,11 +850,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {i} && {{FourWeek_Avg_Var_Pct}} < {i+5}',
-                        'column_id': 'FourWeek_Avg_Var_Pct'
+                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -847,11 +863,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {-i-5} && {{FourWeek_Avg_Pct}} < {-i}',
-                        'column_id': 'FourWeek_Avg_Var_Pct'
+                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -859,11 +876,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{Volume_Var_Pct}} >= {i} && {{Volume_Var_Pct}} < {i+5}',
-                        'column_id': 'Volume_Var_Pct'
+                        'column_id': 'Volume_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -871,11 +889,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{Volume_Var_Pct}} >= {-i-5} && {{Volume_Var_Pct}} < {-i}',
-                        'column_id': 'Volume_Var_Pct'
+                        'column_id': 'Volume_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -883,11 +902,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{ATV_Var_Pct}} >= {i} && {{ATV_Var_Pct}} < {i+5}',
-                        'column_id': 'ATV_Var_Pct'
+                        'column_id': 'ATV_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ] +
@@ -895,11 +915,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 {
                     'if': {
                         'filter_query': f'{{ATV_Var_Pct}} >= {-i-5} && {{ATV_Var_Pct}} < {-i}',
-                        'column_id': 'ATV_Var_Pct'
+                        'column_id': 'ATV_Var_Pct_Display'
                     },
-                    'background': f'linear-gradient(to top, transparent 0%, transparent 31%, white 31%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
                     'color': '#000000',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
             ]
