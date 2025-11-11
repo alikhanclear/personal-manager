@@ -773,23 +773,24 @@ def update_weekly_report(fiscal_year, fiscal_week):
         prev_company = current_company
 
     # Create display columns for variance percentages with bracket notation for negatives
-    # Don't show variance or bars if last year value is 0 (no comparison possible)
+    # Don't show variance or bars if EITHER current year OR last year value is 0/blank (no valid comparison)
     # Keep numeric columns for filtering, add text columns for display
     variance_mapping = {
-        'Weekly_Sales_Var_Pct': 'Last_Year_Sales',
-        'FourWeek_Avg_Var_Pct': 'Last_Year_4W_Avg',
-        'Volume_Var_Pct': 'Last_Year_Vol',
-        'ATV_Var_Pct': 'Last_Year_ATV'
+        'Weekly_Sales_Var_Pct': ('Current_Year_Sales', 'Last_Year_Sales'),
+        'FourWeek_Avg_Var_Pct': ('Current_Year_4W_Avg', 'Last_Year_4W_Avg'),
+        'Volume_Var_Pct': ('Current_Year_Vol', 'Last_Year_Vol'),
+        'ATV_Var_Pct': ('Current_Year_ATV', 'Last_Year_ATV')
     }
 
-    for var_col, base_col in variance_mapping.items():
+    for var_col, (current_col, last_col) in variance_mapping.items():
         df_pandas[f'{var_col}_Display'] = df_pandas.apply(
-            lambda row: '' if row[base_col] == '' or row[base_col] == 0
+            lambda row: '' if (row[current_col] == '' or row[current_col] == 0 or
+                              row[last_col] == '' or row[last_col] == 0)
                         else (f'({abs(row[var_col]):.2f})' if row[var_col] < 0 else f'{row[var_col]:.2f}'),
             axis=1
         )
-        # Set numeric variance to None where base is 0 (for conditional formatting to ignore)
-        df_pandas.loc[df_pandas[base_col] == '', var_col] = None
+        # Set numeric variance to None where either value is 0/blank (for conditional formatting to ignore)
+        df_pandas.loc[(df_pandas[current_col] == '') | (df_pandas[last_col] == ''), var_col] = None
 
     # Create DataTable with conditional formatting
     table = dash_table.DataTable(
