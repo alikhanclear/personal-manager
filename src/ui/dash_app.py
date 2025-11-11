@@ -936,6 +936,82 @@ def update_weekly_report(fiscal_year, fiscal_week):
                     'textAlign': 'right'
                 }
                 for i in range(0, 100, 5)
+            ] +
+            # Override rules: Remove ALL bars when display value is blank OR variance is 0
+            # These come last so they override any bar styling above
+            [
+                {
+                    'if': {
+                        'filter_query': '{Weekly_Sales_Var_Pct_Display} = ""',
+                        'column_id': 'Weekly_Sales_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{Weekly_Sales_Var_Pct} is blank',
+                        'column_id': 'Weekly_Sales_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{FourWeek_Avg_Var_Pct_Display} = ""',
+                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{FourWeek_Avg_Var_Pct} is blank',
+                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{Volume_Var_Pct_Display} = ""',
+                        'column_id': 'Volume_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{Volume_Var_Pct} is blank',
+                        'column_id': 'Volume_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{ATV_Var_Pct_Display} = ""',
+                        'column_id': 'ATV_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
+                {
+                    'if': {
+                        'filter_query': '{ATV_Var_Pct} is blank',
+                        'column_id': 'ATV_Var_Pct_Display'
+                    },
+                    'background': 'white',
+                    'color': '#000000',
+                    'textAlign': 'right'
+                },
             ]
         ),
         sort_action='native',  # Enable sorting
