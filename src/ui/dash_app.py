@@ -819,8 +819,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
             'fontSize': '12px'
         },
         style_header={
-            'backgroundColor': PRIMARY_COLOR,  # CasualHero primary color
-            'color': 'white',
+            'color': '#000000',  # Black text
             'fontWeight': 'bold',
             'textAlign': 'center',
             'fontFamily': 'Inter, sans-serif'
