@@ -670,8 +670,27 @@ Claude will automatically read this file and understand the full context!
 
 ---
 
-**Last Updated:** Nov 10, 2025 - Session 6 (Database Query Optimization & Production Fix!)
+**Last Updated:** Nov 11, 2025 - Session 7 (Variance Calculation Fixes & Relative Bar Scaling!)
 **Next Session:** Monthly Report implementation → Deployment to Fly.io
+
+**Session 7 Summary:**
+- **CRITICAL FIX**: Resolved "division by zero Decimal" errors in variance calculations
+- **Root Cause**: Polars evaluates Decimal division before conditional logic (when/then/otherwise)
+- **Solution**: Cast Decimal columns to Float64 BEFORE any division operations
+  - Applied to all 6 variance calculation locations in kpi_calculator.py
+  - Float64 handles division gracefully with conditional checks
+- **UI Improvements**:
+  - Removed column header background colors (now bold black text only)
+  - Added try-except error handling with detailed traceback display
+- **Bar Scaling Enhancement**: Implemented relative bar scaling for variance columns
+  - Bars now scale based on max absolute value within each column
+  - Makes differences more visible when values are clustered (e.g., all around 40%)
+  - Formula: `(actual_value / max_abs_value) * 100 * 2`
+  - Bars fill up to ~50% of cell width at maximum value
+- **Testing**: Created comprehensive test scripts
+  - `test_variance_simple.py`: 8 test cases validating variance logic
+  - `test_decimal_division.py`: Demonstrates Decimal vs Float64 issue
+- **Status**: ✅ PRODUCTION READY - All variance calculations working correctly
 
 **Session 6 Summary:**
 - **CRITICAL FIX**: Resolved AWS database timeout issues
