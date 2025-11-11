@@ -1,18 +1,20 @@
 """
-CasualHero BI Platform - Dash Application (Toast POS Style)
+CasualHero BI Platform - Dash Application
 
-Professional BI dashboard with Toast POS aesthetic:
-- Toast orange color scheme (#FF6347)
+Professional BI dashboard for specialty food retailers:
+- Clean, minimal, professional design
+- Primary color: #2C5F7C (deep blue-grey)
+- Accent: #E67E22 (warm orange for CTAs)
+- Font: Inter for UI, Roboto for data
 - Left sidebar navigation with collapsible sections
-- Top header with logo, location selector, search bar
-- Clean white background for main content
+- Top header with location selector and search
 - Interactive DataTable with conditional formatting
 
 Architecture:
 - Dash for UI (replaces Streamlit)
 - Same business logic (kpi_calculator, fiscal_calendar)
 - Callback-based interactivity
-- Conditional formatting with data bars
+- Smooth transitions (200ms ease)
 """
 
 import sys
@@ -121,16 +123,19 @@ server = app.server  # For deployment
 
 
 # ============================================================================
-# Custom CSS Styles (Toast POS Theme)
+# Custom CSS Styles (CasualHero Theme)
 # ============================================================================
 
-TOAST_ORANGE = "#FF6347"
-SIDEBAR_BG = "#FAFAFA"
-SELECTED_BG = "#FFE8E3"  # Light orange for selected items
-HEADER_BG = "#FFFFFF"
-BORDER_COLOR = "#E0E0E0"
+# CasualHero Brand Colors
+PRIMARY_COLOR = "#2C5F7C"      # Deep blue-grey
+ACCENT_COLOR = "#E67E22"       # Warm orange
+SIDEBAR_BG = "#FAFAFA"         # Light grey
+SELECTED_BG = "#E8F4F8"        # Light blue-grey for selected items
+HEADER_BG = "#FFFFFF"          # White
+BORDER_COLOR = "#E0E0E0"       # Border grey
+BG_COLOR = "#F5F5F5"           # Page background
 
-# Custom CSS for Toast-style layout
+# Custom CSS for CasualHero layout
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -139,16 +144,17 @@ app.index_string = '''
         <title>{%title%}</title>
         {%favicon%}
         {%css%}
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-            /* Toast POS Custom Styles */
+            /* CasualHero Custom Styles */
             body {
                 margin: 0;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 background-color: #F5F5F5;
             }
 
             /* Top Header */
-            .toast-header {
+            .casualhero-header {
                 background-color: white;
                 border-bottom: 1px solid #E0E0E0;
                 padding: 12px 20px;
@@ -164,7 +170,7 @@ app.index_string = '''
             }
 
             /* Sidebar */
-            .toast-sidebar {
+            .casualhero-sidebar {
                 background-color: #FAFAFA;
                 border-right: 1px solid #E0E0E0;
                 position: fixed;
@@ -176,10 +182,10 @@ app.index_string = '''
                 padding: 20px 0;
             }
 
-            .toast-sidebar .nav-item {
+            .casualhero-sidebar .nav-item {
                 padding: 10px 20px;
                 cursor: pointer;
-                transition: background-color 0.2s;
+                transition: all 200ms ease;
                 color: #333;
                 text-decoration: none;
                 display: flex;
@@ -187,21 +193,21 @@ app.index_string = '''
                 gap: 10px;
             }
 
-            .toast-sidebar .nav-item:hover {
+            .casualhero-sidebar .nav-item:hover {
                 background-color: #F0F0F0;
             }
 
-            .toast-sidebar .nav-item.selected {
-                background-color: #FFE8E3;
-                color: #FF6347;
-                border-left: 3px solid #FF6347;
+            .casualhero-sidebar .nav-item.selected {
+                background-color: #E8F4F8;
+                color: #2C5F7C;
+                border-left: 3px solid #2C5F7C;
             }
 
-            .toast-sidebar .nav-section {
+            .casualhero-sidebar .nav-section {
                 margin-bottom: 20px;
             }
 
-            .toast-sidebar .section-title {
+            .casualhero-sidebar .section-title {
                 padding: 10px 20px;
                 font-size: 11px;
                 font-weight: 600;
@@ -210,13 +216,13 @@ app.index_string = '''
                 letter-spacing: 0.5px;
             }
 
-            .toast-sidebar .subsection {
+            .casualhero-sidebar .subsection {
                 padding-left: 40px;
                 font-size: 14px;
             }
 
             /* Main Content */
-            .toast-content {
+            .casualhero-content {
                 margin-left: 220px;
                 margin-top: 60px;
                 padding: 30px;
@@ -230,18 +236,24 @@ app.index_string = '''
                 padding: 24px;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
                 margin-bottom: 20px;
+                transition: all 200ms ease;
             }
 
-            /* Toast Orange Button */
-            .btn-toast {
-                background-color: #FF6347 !important;
-                border-color: #FF6347 !important;
+            .content-card:hover {
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            }
+
+            /* CTA Button */
+            .btn-casualhero {
+                background-color: #E67E22 !important;
+                border-color: #E67E22 !important;
                 color: white !important;
+                transition: all 200ms ease;
             }
 
-            .btn-toast:hover {
-                background-color: #FF4500 !important;
-                border-color: #FF4500 !important;
+            .btn-casualhero:hover {
+                background-color: #D35400 !important;
+                border-color: #D35400 !important;
             }
 
             /* Filters Section */
@@ -253,9 +265,14 @@ app.index_string = '''
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             }
 
-            /* Orange accent for dropdowns */
+            /* Primary color accent for dropdowns */
             .Select-control:focus {
-                border-color: #FF6347 !important;
+                border-color: #2C5F7C !important;
+            }
+
+            /* Data tables use Roboto font */
+            .dash-table-container {
+                font-family: 'Roboto', sans-serif !important;
             }
         </style>
     </head>
@@ -272,17 +289,17 @@ app.index_string = '''
 
 
 # ============================================================================
-# Layout Components (Toast POS Style)
+# Layout Components (CasualHero Style)
 # ============================================================================
 
 # Top Header
 header = html.Div(
-    className="toast-header",
+    className="casualhero-header",
     children=[
         # Left side: Logo + menu toggle
         html.Div([
-            html.Span("☰", style={'fontSize': '24px', 'marginRight': '15px', 'cursor': 'pointer', 'color': '#999'}),
-            html.Span("🍊 toast", style={'fontSize': '24px', 'fontWeight': 'bold', 'color': TOAST_ORANGE}),
+            html.Span("☰", style={'fontSize': '24px', 'marginRight': '15px', 'cursor': 'pointer', 'color': '#999', 'transition': 'all 200ms ease'}),
+            html.Span("CasualHero", style={'fontSize': '24px', 'fontWeight': '700', 'color': PRIMARY_COLOR, 'letterSpacing': '-0.5px'}),
         ], style={'display': 'flex', 'alignItems': 'center'}),
 
         # Center: Location selector
@@ -307,18 +324,19 @@ header = html.Div(
             html.Div([
                 html.I(className="fas fa-search", style={'color': '#999', 'marginRight': '8px'}),
                 dcc.Input(
-                    placeholder="Find employees, menu items, settings, and more...",
+                    placeholder="Search reports, data, settings...",
                     type="text",
                     style={
                         'width': '350px',
                         'border': '1px solid #E0E0E0',
                         'borderRadius': '4px',
                         'padding': '8px 12px',
-                        'fontSize': '14px'
+                        'fontSize': '14px',
+                        'transition': 'all 200ms ease'
                     }
                 )
             ], style={'display': 'flex', 'alignItems': 'center', 'marginRight': '20px'}),
-            html.Span("☁️ Unpublished changes", style={'marginRight': '15px', 'fontSize': '14px', 'color': '#666'}),
+            html.Span("Last refresh: 9:30 AM", style={'marginRight': '15px', 'fontSize': '14px', 'color': '#666'}),
             html.I(className="fas fa-shopping-cart", style={'marginRight': '15px', 'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
             html.I(className="fas fa-user-circle", style={'marginRight': '15px', 'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
             html.I(className="fas fa-question-circle", style={'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
@@ -326,9 +344,9 @@ header = html.Div(
     ]
 )
 
-# Left Sidebar Navigation (Toast POS Style)
+# Left Sidebar Navigation (CasualHero Style)
 sidebar = html.Div(
-    className="toast-sidebar",
+    className="casualhero-sidebar",
     children=[
         # Home
         html.Div(
@@ -425,7 +443,7 @@ sidebar = html.Div(
 # Main content area
 content = html.Div(
     id="page-content",
-    className="toast-content"
+    className="casualhero-content"
 )
 
 # App layout
@@ -438,11 +456,11 @@ app.layout = html.Div([
 
 
 # ============================================================================
-# Page Layouts (Toast POS Style)
+# Page Layouts (CasualHero Style)
 # ============================================================================
 
 def home_layout():
-    """Home page layout - Toast POS style"""
+    """Home page layout - CasualHero style"""
     today = date.today()
     current_fy = get_fiscal_year(today)
     current_week = get_fiscal_week(today)
@@ -456,7 +474,7 @@ def home_layout():
             className="content-card",
             children=[
                 html.Div([
-                    html.I(className="fas fa-calendar-alt", style={'color': TOAST_ORANGE, 'marginRight': '10px', 'fontSize': '20px'}),
+                    html.I(className="fas fa-calendar-alt", style={'color': PRIMARY_COLOR, 'marginRight': '10px', 'fontSize': '20px'}),
                     html.Span(f"Current Period: FY{current_fy} Week {current_week}", style={'fontSize': '16px', 'fontWeight': '500'})
                 ], style={'padding': '10px 0'})
             ]
@@ -471,9 +489,9 @@ def home_layout():
                     className="content-card",
                     style={'flex': '1', 'marginRight': '15px', 'textAlign': 'center'},
                     children=[
-                        html.I(className="fas fa-receipt", style={'fontSize': '32px', 'color': TOAST_ORANGE, 'marginBottom': '10px'}),
+                        html.I(className="fas fa-receipt", style={'fontSize': '32px', 'color': ACCENT_COLOR, 'marginBottom': '10px'}),
                         html.H5("Total Orders", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
-                        html.H2(f"{df['Order_Number'].n_unique():,}", style={'color': '#333', 'margin': '0'})
+                        html.H2(f"{df['Order_Number'].n_unique():,}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto'})
                     ]
                 ),
                 # Total Sales
@@ -483,7 +501,7 @@ def home_layout():
                     children=[
                         html.I(className="fas fa-pound-sign", style={'fontSize': '32px', 'color': '#28a745', 'marginBottom': '10px'}),
                         html.H5("Total Sales", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
-                        html.H2(f"£{df['Order_Net_Sales'].sum():,.0f}", style={'color': '#333', 'margin': '0'})
+                        html.H2(f"£{df['Order_Net_Sales'].sum():,.0f}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto'})
                     ]
                 ),
                 # Establishments
@@ -491,9 +509,9 @@ def home_layout():
                     className="content-card",
                     style={'flex': '1', 'textAlign': 'center'},
                     children=[
-                        html.I(className="fas fa-store", style={'fontSize': '32px', 'color': '#17a2b8', 'marginBottom': '10px'}),
+                        html.I(className="fas fa-store", style={'fontSize': '32px', 'color': PRIMARY_COLOR, 'marginBottom': '10px'}),
                         html.H5("Establishments", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
-                        html.H2(f"{df['Establishment'].n_unique()}", style={'color': '#333', 'margin': '0'})
+                        html.H2(f"{df['Establishment'].n_unique()}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto'})
                     ]
                 ),
             ], style={'display': 'flex', 'gap': '15px', 'marginBottom': '20px'}),
@@ -506,15 +524,15 @@ def home_layout():
                 html.H4("Available Reports", style={'marginBottom': '15px', 'color': '#333'}),
                 html.Div([
                     html.Div([
-                        html.I(className="fas fa-chart-line", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.I(className="fas fa-chart-line", style={'color': PRIMARY_COLOR, 'marginRight': '10px'}),
                         html.Span("Sales Summary - YoY comparison, 4W avg, order volumes, ATV", style={'fontSize': '14px'})
                     ], style={'padding': '12px', 'borderBottom': '1px solid #E0E0E0'}),
                     html.Div([
-                        html.I(className="fas fa-chart-bar", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.I(className="fas fa-chart-bar", style={'color': PRIMARY_COLOR, 'marginRight': '10px'}),
                         html.Span("Sales Analytics - Detailed breakdown and trends", style={'fontSize': '14px', 'color': '#999'})
                     ], style={'padding': '12px', 'borderBottom': '1px solid #E0E0E0'}),
                     html.Div([
-                        html.I(className="fas fa-chart-area", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.I(className="fas fa-chart-area", style={'color': PRIMARY_COLOR, 'marginRight': '10px'}),
                         html.Span("Sales Breakdown - 5-year historical analysis", style={'fontSize': '14px', 'color': '#999'})
                     ], style={'padding': '12px'}),
                 ])
@@ -541,7 +559,7 @@ def home_layout():
 
 
 def weekly_report_layout():
-    """Weekly Report page layout - Toast POS style"""
+    """Weekly Report page layout - CasualHero style"""
     # Get available fiscal years and weeks
     available_years = sorted(df['Fiscal_Year'].unique().to_list(), reverse=True)
     current_fy = available_years[0] if available_years else 2026
@@ -585,10 +603,10 @@ def weekly_report_layout():
                         ),
                     ], style={'display': 'inline-flex', 'alignItems': 'center'}),
 
-                    # More filters button (like Toast)
+                    # More filters button
                     html.Button(
                         [html.I(className="fas fa-filter", style={'marginRight': '8px'}), "More filters"],
-                        className="btn btn-toast",
+                        className="btn btn-casualhero",
                         style={
                             'marginLeft': '20px',
                             'padding': '8px 16px',
@@ -596,20 +614,21 @@ def weekly_report_layout():
                             'borderRadius': '4px',
                             'border': 'none',
                             'backgroundColor': 'white',
-                            'color': TOAST_ORANGE,
-                            'border': f'1px solid {TOAST_ORANGE}',
-                            'cursor': 'pointer'
+                            'color': ACCENT_COLOR,
+                            'border': f'1px solid {ACCENT_COLOR}',
+                            'cursor': 'pointer',
+                            'transition': 'all 200ms ease'
                         }
                     ),
                 ], style={'display': 'flex', 'alignItems': 'center', 'flexWrap': 'wrap', 'gap': '15px'}),
             ]
         ),
 
-        # Loading indicator with Toast styling
+        # Loading indicator
         dcc.Loading(
             id="loading-weekly-report",
             type="default",
-            color=TOAST_ORANGE,
+            color=PRIMARY_COLOR,
             children=html.Div(id='weekly-report-table')
         )
     ])
@@ -624,8 +643,8 @@ def weekly_report_layout():
     Input('url', 'pathname')
 )
 def display_page(pathname):
-    """Route pages based on URL (Toast POS structure)"""
-    # Map Toast-style routes to content
+    """Route pages based on URL (CasualHero structure)"""
+    # Map CasualHero routes to content
     if pathname == '/sales-summary':
         return weekly_report_layout()
     elif pathname == '/sales-analytics':
@@ -748,14 +767,15 @@ def update_weekly_report(fiscal_year, fiscal_week):
         style_cell={
             'textAlign': 'left',
             'padding': '10px',
-            'fontFamily': 'Arial, sans-serif',
+            'fontFamily': 'Roboto, sans-serif',
             'fontSize': '12px'
         },
         style_header={
-            'backgroundColor': TOAST_ORANGE,  # Toast orange
+            'backgroundColor': PRIMARY_COLOR,  # CasualHero primary color
             'color': 'white',
             'fontWeight': 'bold',
-            'textAlign': 'center'
+            'textAlign': 'center',
+            'fontFamily': 'Inter, sans-serif'
         },
         style_data_conditional=(
             # Data bars using diverging color scale (Power BI style)
@@ -914,7 +934,8 @@ def update_weekly_report(fiscal_year, fiscal_week):
                                     'backgroundColor': 'white',
                                     'border': '1px solid #E0E0E0',
                                     'borderRadius': '4px',
-                                    'cursor': 'pointer'
+                                    'cursor': 'pointer',
+                                    'transition': 'all 200ms ease'
                                 }
                             ),
                             html.Button(
@@ -926,7 +947,8 @@ def update_weekly_report(fiscal_year, fiscal_week):
                                     'backgroundColor': 'white',
                                     'border': '1px solid #E0E0E0',
                                     'borderRadius': '4px',
-                                    'cursor': 'pointer'
+                                    'cursor': 'pointer',
+                                    'transition': 'all 200ms ease'
                                 }
                             ),
                             html.Button(
@@ -938,7 +960,8 @@ def update_weekly_report(fiscal_year, fiscal_week):
                                     'backgroundColor': 'white',
                                     'border': '1px solid #E0E0E0',
                                     'borderRadius': '4px',
-                                    'cursor': 'pointer'
+                                    'cursor': 'pointer',
+                                    'transition': 'all 200ms ease'
                                 }
                             ),
                             html.Button(
@@ -949,7 +972,8 @@ def update_weekly_report(fiscal_year, fiscal_week):
                                     'backgroundColor': 'white',
                                     'border': '1px solid #E0E0E0',
                                     'borderRadius': '4px',
-                                    'cursor': 'pointer'
+                                    'cursor': 'pointer',
+                                    'transition': 'all 200ms ease'
                                 }
                             ),
                         ], style={'display': 'flex'})
