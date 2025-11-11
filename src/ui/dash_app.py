@@ -274,6 +274,14 @@ app.index_string = '''
             .dash-table-container {
                 font-family: 'Roboto', sans-serif !important;
             }
+
+            /* Selected cells - light blue instead of orange */
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td.focused,
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td.cell--selected,
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td.active {
+                background-color: #E8F4F8 !important;
+                border: 1px solid #2C5F7C !important;
+            }
         </style>
     </head>
     <body>
@@ -780,6 +788,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
         style_data_conditional=(
             # Data bars using diverging color scale (Power BI style)
             # Bars are 60% width - thinner than full cell
+            # Green bars: #00B050, Red bars: #FFB6C1
             # Create gradient bars for positive values (green on right side)
             [
                 {
@@ -787,7 +796,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {i} && {{Weekly_Sales_Var_Pct}} < {i+5}',
                         'column_id': 'Weekly_Sales_Var_Pct'
                     },
-                    'background': f'linear-gradient(90deg, white 0%, white 50%, #90EE90 50%, #90EE90 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
+                    'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
                     'color': '#006400',
                     'fontWeight': 'bold'
                 }
@@ -813,7 +822,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {i} && {{FourWeek_Avg_Var_Pct}} < {i+5}',
                         'column_id': 'FourWeek_Avg_Var_Pct'
                     },
-                    'background': f'linear-gradient(90deg, white 0%, white 50%, #90EE90 50%, #90EE90 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
+                    'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
                     'color': '#006400',
                     'fontWeight': 'bold'
                 }
@@ -837,7 +846,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'filter_query': f'{{Volume_Var_Pct}} >= {i} && {{Volume_Var_Pct}} < {i+5}',
                         'column_id': 'Volume_Var_Pct'
                     },
-                    'background': f'linear-gradient(90deg, white 0%, white 50%, #90EE90 50%, #90EE90 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
+                    'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
                     'color': '#006400',
                     'fontWeight': 'bold'
                 }
@@ -861,7 +870,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'filter_query': f'{{ATV_Var_Pct}} >= {i} && {{ATV_Var_Pct}} < {i+5}',
                         'column_id': 'ATV_Var_Pct'
                     },
-                    'background': f'linear-gradient(90deg, white 0%, white 50%, #90EE90 50%, #90EE90 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
+                    'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)/100*30}%, white {50 + (i+2.5)/100*30}%)',
                     'color': '#006400',
                     'fontWeight': 'bold'
                 }
