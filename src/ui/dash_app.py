@@ -282,12 +282,6 @@ header = html.Div(
         # Left side: Logo + menu toggle
         html.Div([
             html.Span("☰", style={'fontSize': '24px', 'marginRight': '15px', 'cursor': 'pointer', 'color': '#999'}),
-            html.Img(
-                src="/assets/toast-logo.png",
-                height="30px",
-                style={'marginRight': '20px'},
-                onerror="this.style.display='none'"  # Hide if logo not found
-            ),
             html.Span("🍊 toast", style={'fontSize': '24px', 'fontWeight': 'bold', 'color': TOAST_ORANGE}),
         ], style={'display': 'flex', 'alignItems': 'center'}),
 
