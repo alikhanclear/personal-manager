@@ -724,15 +724,16 @@ def update_weekly_report(fiscal_year, fiscal_week):
     if fiscal_year is None or fiscal_week is None:
         return html.P("Please select a fiscal year and week")
 
-    calc_start = datetime.now()
+    try:
+        calc_start = datetime.now()
 
-    # Calculate report using existing business logic
-    report = calculate_weekly_report(df, fiscal_year=fiscal_year, fiscal_week=fiscal_week)
+        # Calculate report using existing business logic
+        report = calculate_weekly_report(df, fiscal_year=fiscal_year, fiscal_week=fiscal_week)
 
-    calc_duration = (datetime.now() - calc_start).total_seconds()
+        calc_duration = (datetime.now() - calc_start).total_seconds()
 
-    # Format data for display
-    formatted_report = report.with_columns([
+        # Format data for display
+        formatted_report = report.with_columns([
         # Convert to float for DataTable
         pl.col('Current_Year_Sales').cast(pl.Float64),
         pl.col('Last_Year_Sales').cast(pl.Float64),
@@ -1121,6 +1122,16 @@ def update_weekly_report(fiscal_year, fiscal_week):
             ]
         )
     ])
+
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in update_weekly_report: {error_trace}")
+        return html.Div([
+            html.H4("Error generating report", style={'color': 'red'}),
+            html.P(f"Error: {str(e)}"),
+            html.Pre(error_trace, style={'fontSize': '10px', 'backgroundColor': '#f5f5f5', 'padding': '10px'})
+        ])
 
 
 # ============================================================================
