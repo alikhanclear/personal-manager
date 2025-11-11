@@ -611,8 +611,16 @@ def calculate_weekly_report(
         how='left'
     )
 
-    # Fill nulls with 0
-    result = result.fill_null(0)
+    # Fill nulls with 0 for numeric columns, but NOT for variance percentages (keep None for no comparison)
+    numeric_cols = ['Current_Year_Sales', 'Last_Year_Sales',
+                    'Current_Year_4W_Avg', 'Last_Year_4W_Avg',
+                    'Current_Year_Vol', 'Last_Year_Vol',
+                    'Current_Year_ATV', 'Last_Year_ATV']
+
+    for col in numeric_cols:
+        result = result.with_columns([
+            pl.col(col).fill_null(0)
+        ])
 
     # Sort by Company (custom order: SNOWFLAKE, STRT SND, SKYVIEW) then Establishment
     # Create a sort order column
