@@ -1,8 +1,12 @@
 """
-CasualHero BI Platform - Dash Application
+CasualHero BI Platform - Dash Application (Toast POS Style)
 
-Professional BI dashboard with interactive DataTable, conditional formatting,
-and Power BI-style data bars.
+Professional BI dashboard with Toast POS aesthetic:
+- Toast orange color scheme (#FF6347)
+- Left sidebar navigation with collapsible sections
+- Top header with logo, location selector, search bar
+- Clean white background for main content
+- Interactive DataTable with conditional formatting
 
 Architecture:
 - Dash for UI (replaces Streamlit)
@@ -26,6 +30,7 @@ sys.path.insert(0, str(project_root))
 import dash
 from dash import dcc, html, dash_table, Input, Output, State, callback
 import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
 import polars as pl
 import pandas as pd
 
@@ -104,7 +109,10 @@ print(f"Ready! Loaded {len(df):,} transactions")
 
 app = dash.Dash(
     __name__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        dbc.icons.FONT_AWESOME  # For icons
+    ],
     suppress_callback_exceptions=True,
     title="CasualHero BI Platform"
 )
@@ -113,119 +121,433 @@ server = app.server  # For deployment
 
 
 # ============================================================================
-# Layout Components
+# Custom CSS Styles (Toast POS Theme)
 # ============================================================================
 
-# Navbar
-navbar = dbc.NavbarSimple(
+TOAST_ORANGE = "#FF6347"
+SIDEBAR_BG = "#FAFAFA"
+SELECTED_BG = "#FFE8E3"  # Light orange for selected items
+HEADER_BG = "#FFFFFF"
+BORDER_COLOR = "#E0E0E0"
+
+# Custom CSS for Toast-style layout
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            /* Toast POS Custom Styles */
+            body {
+                margin: 0;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+                background-color: #F5F5F5;
+            }
+
+            /* Top Header */
+            .toast-header {
+                background-color: white;
+                border-bottom: 1px solid #E0E0E0;
+                padding: 12px 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1000;
+                height: 60px;
+            }
+
+            /* Sidebar */
+            .toast-sidebar {
+                background-color: #FAFAFA;
+                border-right: 1px solid #E0E0E0;
+                position: fixed;
+                left: 0;
+                top: 60px;
+                bottom: 0;
+                width: 220px;
+                overflow-y: auto;
+                padding: 20px 0;
+            }
+
+            .toast-sidebar .nav-item {
+                padding: 10px 20px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                color: #333;
+                text-decoration: none;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .toast-sidebar .nav-item:hover {
+                background-color: #F0F0F0;
+            }
+
+            .toast-sidebar .nav-item.selected {
+                background-color: #FFE8E3;
+                color: #FF6347;
+                border-left: 3px solid #FF6347;
+            }
+
+            .toast-sidebar .nav-section {
+                margin-bottom: 20px;
+            }
+
+            .toast-sidebar .section-title {
+                padding: 10px 20px;
+                font-size: 11px;
+                font-weight: 600;
+                color: #999;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .toast-sidebar .subsection {
+                padding-left: 40px;
+                font-size: 14px;
+            }
+
+            /* Main Content */
+            .toast-content {
+                margin-left: 220px;
+                margin-top: 60px;
+                padding: 30px;
+                background-color: #F5F5F5;
+                min-height: calc(100vh - 60px);
+            }
+
+            .content-card {
+                background-color: white;
+                border-radius: 8px;
+                padding: 24px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }
+
+            /* Toast Orange Button */
+            .btn-toast {
+                background-color: #FF6347 !important;
+                border-color: #FF6347 !important;
+                color: white !important;
+            }
+
+            .btn-toast:hover {
+                background-color: #FF4500 !important;
+                border-color: #FF4500 !important;
+            }
+
+            /* Filters Section */
+            .filters-bar {
+                background-color: white;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+
+            /* Orange accent for dropdowns */
+            .Select-control:focus {
+                border-color: #FF6347 !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+
+# ============================================================================
+# Layout Components (Toast POS Style)
+# ============================================================================
+
+# Top Header
+header = html.Div(
+    className="toast-header",
     children=[
-        dbc.NavItem(dbc.NavLink("Home", href="/", id="nav-home")),
-        dbc.NavItem(dbc.NavLink("Weekly Report", href="/weekly", id="nav-weekly")),
-        dbc.NavItem(dbc.NavLink("Monthly Report", href="/monthly", id="nav-monthly")),
-        dbc.NavItem(dbc.NavLink("Trends", href="/trends", id="nav-trends")),
-    ],
-    brand="📊 CasualHero BI Platform",
-    brand_href="/",
-    color="#FF6B9D",  # Snowflake pink
-    dark=True,
-    className="mb-4"
+        # Left side: Logo + menu toggle
+        html.Div([
+            html.Span("☰", style={'fontSize': '24px', 'marginRight': '15px', 'cursor': 'pointer', 'color': '#999'}),
+            html.Img(
+                src="/assets/toast-logo.png",
+                height="30px",
+                style={'marginRight': '20px'},
+                onerror="this.style.display='none'"  # Hide if logo not found
+            ),
+            html.Span("🍊 toast", style={'fontSize': '24px', 'fontWeight': 'bold', 'color': TOAST_ORANGE}),
+        ], style={'display': 'flex', 'alignItems': 'center'}),
+
+        # Center: Location selector
+        html.Div([
+            html.I(className="fas fa-map-marker-alt", style={'color': '#666', 'marginRight': '8px'}),
+            dcc.Dropdown(
+                id='location-selector',
+                options=[
+                    {'label': 'All Locations', 'value': 'all'},
+                    {'label': 'Meadowhall, Sheffield', 'value': 'meadowhall'},
+                    {'label': 'The O2, London', 'value': 'o2'},
+                    {'label': 'Westfield, Stratford', 'value': 'westfield'},
+                ],
+                value='all',
+                clearable=False,
+                style={'width': '250px', 'display': 'inline-block'}
+            )
+        ], style={'display': 'flex', 'alignItems': 'center'}),
+
+        # Right side: Search + user menu
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-search", style={'color': '#999', 'marginRight': '8px'}),
+                dcc.Input(
+                    placeholder="Find employees, menu items, settings, and more...",
+                    type="text",
+                    style={
+                        'width': '350px',
+                        'border': '1px solid #E0E0E0',
+                        'borderRadius': '4px',
+                        'padding': '8px 12px',
+                        'fontSize': '14px'
+                    }
+                )
+            ], style={'display': 'flex', 'alignItems': 'center', 'marginRight': '20px'}),
+            html.Span("☁️ Unpublished changes", style={'marginRight': '15px', 'fontSize': '14px', 'color': '#666'}),
+            html.I(className="fas fa-shopping-cart", style={'marginRight': '15px', 'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
+            html.I(className="fas fa-user-circle", style={'marginRight': '15px', 'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
+            html.I(className="fas fa-question-circle", style={'fontSize': '18px', 'color': '#666', 'cursor': 'pointer'}),
+        ], style={'display': 'flex', 'alignItems': 'center'}),
+    ]
 )
 
-# Sidebar
-sidebar = dbc.Col(
-    [
-        html.H5("Data Summary", className="mt-3"),
-        html.Hr(),
-        html.P([
-            html.Strong("Transactions: "),
-            f"{len(df):,}"
-        ]),
-        html.P([
-            html.Strong("Establishments: "),
-            f"{df['Establishment'].n_unique()}"
-        ]),
-        html.P([
-            html.Strong("Date Range: "),
-            f"{df['Adjusted_Order_Date'].min()} to {df['Adjusted_Order_Date'].max()}"
-        ]),
-        html.Hr(),
-        html.H6("Current Period"),
-        html.P([
-            f"FY{get_fiscal_year(date.today())} Week {get_fiscal_week(date.today())}"
-        ]),
-        html.Hr(),
-        dbc.Button("🔄 Reload Data", id="reload-btn", color="primary", size="sm", className="mb-2"),
-        html.Small("Cache warmer runs at 9:25 AM daily", className="text-muted"),
-    ],
-    width=2,
-    className="bg-light p-3"
+# Left Sidebar Navigation (Toast POS Style)
+sidebar = html.Div(
+    className="toast-sidebar",
+    children=[
+        # Home
+        html.Div(
+            className="nav-section",
+            children=[
+                dcc.Link(
+                    [html.I(className="fas fa-home"), html.Span("Home")],
+                    href="/",
+                    className="nav-item",
+                    id="nav-home"
+                )
+            ]
+        ),
+
+        # Reports Section
+        html.Div(
+            className="nav-section",
+            children=[
+                html.Div("REPORTS", className="section-title"),
+                dcc.Link(
+                    [html.I(className="far fa-file-alt"), html.Span("Overview")],
+                    href="/overview",
+                    className="nav-item",
+                    id="nav-overview"
+                ),
+
+                # Sales subsection
+                html.Div([
+                    html.Div(
+                        [html.I(className="fas fa-dollar-sign"), html.Span("Sales")],
+                        className="nav-item",
+                        style={'fontWeight': '500'}
+                    ),
+                    dcc.Link(
+                        html.Span("Sales summary"),
+                        href="/sales-summary",
+                        className="nav-item subsection",
+                        id="nav-sales-summary"
+                    ),
+                    dcc.Link(
+                        html.Span("Sales analytics"),
+                        href="/sales-analytics",
+                        className="nav-item subsection",
+                        id="nav-sales-analytics"
+                    ),
+                    dcc.Link(
+                        html.Span("Sales breakdown"),
+                        href="/sales-breakdown",
+                        className="nav-item subsection",
+                        id="nav-sales-breakdown"
+                    ),
+                ]),
+
+                # Orders subsection
+                dcc.Link(
+                    [html.I(className="fas fa-receipt"), html.Span("Orders")],
+                    href="/orders",
+                    className="nav-item",
+                    id="nav-orders"
+                ),
+                dcc.Link(
+                    html.Span("Order details"),
+                    href="/order-details",
+                    className="nav-item subsection"
+                ),
+
+                # Employee performance
+                dcc.Link(
+                    [html.I(className="fas fa-users"), html.Span("Employee performance")],
+                    href="/employee-performance",
+                    className="nav-item"
+                ),
+            ]
+        ),
+
+        # Other Sections (placeholder)
+        html.Div(
+            className="nav-section",
+            children=[
+                html.Div("MANAGEMENT", className="section-title"),
+                html.Div(
+                    [html.I(className="fas fa-utensils"), html.Span("Menus")],
+                    className="nav-item"
+                ),
+                html.Div(
+                    [html.I(className="fas fa-credit-card"), html.Span("Payments")],
+                    className="nav-item"
+                ),
+            ]
+        ),
+    ]
 )
 
 # Main content area
-content = dbc.Col(
+content = html.Div(
     id="page-content",
-    width=10,
-    className="p-4"
+    className="toast-content"
 )
 
 # App layout
-app.layout = dbc.Container(
-    [
-        dcc.Location(id='url', refresh=False),
-        navbar,
-        dbc.Row([sidebar, content]),
-    ],
-    fluid=True
-)
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    header,
+    sidebar,
+    content
+])
 
 
 # ============================================================================
-# Page Layouts
+# Page Layouts (Toast POS Style)
 # ============================================================================
 
 def home_layout():
-    """Home page layout"""
+    """Home page layout - Toast POS style"""
     today = date.today()
     current_fy = get_fiscal_year(today)
     current_week = get_fiscal_week(today)
 
     return html.Div([
-        html.H2("🏠 Welcome to CasualHero BI Platform"),
-        html.Hr(),
-        dbc.Alert(f"Current Period: FY{current_fy} Week {current_week}", color="info"),
-        html.H4("Available Reports:"),
-        dbc.ListGroup([
-            dbc.ListGroupItem("Weekly Report - YoY comparison, 4W avg, order volumes, ATV"),
-            dbc.ListGroupItem("Monthly Report - Monthly aggregations and trends (Coming soon)"),
-            dbc.ListGroupItem("Trends - 5-year historical analysis (Coming soon)"),
+        # Page title
+        html.H2("Overview", style={'marginBottom': '20px', 'color': '#333'}),
+
+        # Current period card
+        html.Div(
+            className="content-card",
+            children=[
+                html.Div([
+                    html.I(className="fas fa-calendar-alt", style={'color': TOAST_ORANGE, 'marginRight': '10px', 'fontSize': '20px'}),
+                    html.Span(f"Current Period: FY{current_fy} Week {current_week}", style={'fontSize': '16px', 'fontWeight': '500'})
+                ], style={'padding': '10px 0'})
+            ]
+        ),
+
+        # Quick Stats Cards
+        html.Div([
+            html.H4("Quick Stats", style={'marginBottom': '15px', 'color': '#333'}),
+            html.Div([
+                # Total Orders
+                html.Div(
+                    className="content-card",
+                    style={'flex': '1', 'marginRight': '15px', 'textAlign': 'center'},
+                    children=[
+                        html.I(className="fas fa-receipt", style={'fontSize': '32px', 'color': TOAST_ORANGE, 'marginBottom': '10px'}),
+                        html.H5("Total Orders", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
+                        html.H2(f"{df['Order_Number'].n_unique():,}", style={'color': '#333', 'margin': '0'})
+                    ]
+                ),
+                # Total Sales
+                html.Div(
+                    className="content-card",
+                    style={'flex': '1', 'marginRight': '15px', 'textAlign': 'center'},
+                    children=[
+                        html.I(className="fas fa-pound-sign", style={'fontSize': '32px', 'color': '#28a745', 'marginBottom': '10px'}),
+                        html.H5("Total Sales", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
+                        html.H2(f"£{df['Order_Net_Sales'].sum():,.0f}", style={'color': '#333', 'margin': '0'})
+                    ]
+                ),
+                # Establishments
+                html.Div(
+                    className="content-card",
+                    style={'flex': '1', 'textAlign': 'center'},
+                    children=[
+                        html.I(className="fas fa-store", style={'fontSize': '32px', 'color': '#17a2b8', 'marginBottom': '10px'}),
+                        html.H5("Establishments", style={'color': '#666', 'fontSize': '14px', 'marginBottom': '5px'}),
+                        html.H2(f"{df['Establishment'].n_unique()}", style={'color': '#333', 'margin': '0'})
+                    ]
+                ),
+            ], style={'display': 'flex', 'gap': '15px', 'marginBottom': '20px'}),
         ]),
-        html.Hr(),
-        html.H4("Quick Stats:"),
-        dbc.Row([
-            dbc.Col(dbc.Card([
-                dbc.CardBody([
-                    html.H5("Total Orders", className="card-title"),
-                    html.H3(f"{df['Order_Number'].n_unique():,}", className="text-primary")
+
+        # Available Reports Card
+        html.Div(
+            className="content-card",
+            children=[
+                html.H4("Available Reports", style={'marginBottom': '15px', 'color': '#333'}),
+                html.Div([
+                    html.Div([
+                        html.I(className="fas fa-chart-line", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.Span("Sales Summary - YoY comparison, 4W avg, order volumes, ATV", style={'fontSize': '14px'})
+                    ], style={'padding': '12px', 'borderBottom': '1px solid #E0E0E0'}),
+                    html.Div([
+                        html.I(className="fas fa-chart-bar", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.Span("Sales Analytics - Detailed breakdown and trends", style={'fontSize': '14px', 'color': '#999'})
+                    ], style={'padding': '12px', 'borderBottom': '1px solid #E0E0E0'}),
+                    html.Div([
+                        html.I(className="fas fa-chart-area", style={'color': TOAST_ORANGE, 'marginRight': '10px'}),
+                        html.Span("Sales Breakdown - 5-year historical analysis", style={'fontSize': '14px', 'color': '#999'})
+                    ], style={'padding': '12px'}),
                 ])
-            ])),
-            dbc.Col(dbc.Card([
-                dbc.CardBody([
-                    html.H5("Total Sales", className="card-title"),
-                    html.H3(f"£{df['Order_Net_Sales'].sum():,.2f}", className="text-success")
-                ])
-            ])),
-            dbc.Col(dbc.Card([
-                dbc.CardBody([
-                    html.H5("Establishments", className="card-title"),
-                    html.H3(f"{df['Establishment'].n_unique()}", className="text-info")
-                ])
-            ])),
-        ])
+            ]
+        ),
+
+        # Data info card
+        html.Div(
+            className="content-card",
+            children=[
+                html.H5("Data Information", style={'marginBottom': '10px', 'color': '#333'}),
+                html.P([
+                    html.Strong("Transactions: "), f"{len(df):,}"
+                ], style={'marginBottom': '5px', 'fontSize': '14px'}),
+                html.P([
+                    html.Strong("Date Range: "), f"{df['Adjusted_Order_Date'].min()} to {df['Adjusted_Order_Date'].max()}"
+                ], style={'marginBottom': '5px', 'fontSize': '14px'}),
+                html.P([
+                    html.Strong("Last Refresh: "), f"{DATA_CACHE.get('last_refresh', datetime.now()).strftime('%Y-%m-%d %H:%M:%S')}"
+                ], style={'marginBottom': '0', 'fontSize': '14px'}),
+            ]
+        ),
     ])
 
 
 def weekly_report_layout():
-    """Weekly Report page layout"""
+    """Weekly Report page layout - Toast POS style"""
     # Get available fiscal years and weeks
     available_years = sorted(df['Fiscal_Year'].unique().to_list(), reverse=True)
     current_fy = available_years[0] if available_years else 2026
@@ -236,35 +558,64 @@ def weekly_report_layout():
     current_week = available_weeks[-1] if available_weeks else 1
 
     return html.Div([
-        html.H2("📅 Weekly Report"),
-        html.Hr(),
+        # Page title
+        html.H2("Sales summary", style={'marginBottom': '20px', 'color': '#333'}),
 
-        # Week selector
-        dbc.Row([
-            dbc.Col([
-                html.Label("Fiscal Year:"),
-                dcc.Dropdown(
-                    id='fiscal-year-dropdown',
-                    options=[{'label': f'FY{year}', 'value': year} for year in available_years],
-                    value=current_fy,
-                    clearable=False
-                )
-            ], width=3),
-            dbc.Col([
-                html.Label("Week:"),
-                dcc.Dropdown(
-                    id='fiscal-week-dropdown',
-                    options=[{'label': f'Week {week}', 'value': week} for week in available_weeks],
-                    value=current_week,
-                    clearable=False
-                )
-            ], width=3),
-        ], className="mb-4"),
+        # Filters card (Toast style)
+        html.Div(
+            className="filters-bar",
+            children=[
+                html.Div([
+                    # Date range picker (mimicking Toast)
+                    html.Div([
+                        html.I(className="fas fa-calendar", style={'color': '#666', 'marginRight': '8px'}),
+                        html.Label("Fiscal Year:", style={'marginRight': '10px', 'fontSize': '14px', 'fontWeight': '500'}),
+                        dcc.Dropdown(
+                            id='fiscal-year-dropdown',
+                            options=[{'label': f'FY{year}', 'value': year} for year in available_years],
+                            value=current_fy,
+                            clearable=False,
+                            style={'width': '150px', 'display': 'inline-block', 'marginRight': '20px'}
+                        ),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '30px'}),
 
-        # Loading indicator
+                    html.Div([
+                        html.I(className="fas fa-calendar-week", style={'color': '#666', 'marginRight': '8px'}),
+                        html.Label("Week:", style={'marginRight': '10px', 'fontSize': '14px', 'fontWeight': '500'}),
+                        dcc.Dropdown(
+                            id='fiscal-week-dropdown',
+                            options=[{'label': f'Week {week}', 'value': week} for week in available_weeks],
+                            value=current_week,
+                            clearable=False,
+                            style={'width': '150px', 'display': 'inline-block', 'marginRight': '20px'}
+                        ),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+
+                    # More filters button (like Toast)
+                    html.Button(
+                        [html.I(className="fas fa-filter", style={'marginRight': '8px'}), "More filters"],
+                        className="btn btn-toast",
+                        style={
+                            'marginLeft': '20px',
+                            'padding': '8px 16px',
+                            'fontSize': '14px',
+                            'borderRadius': '4px',
+                            'border': 'none',
+                            'backgroundColor': 'white',
+                            'color': TOAST_ORANGE,
+                            'border': f'1px solid {TOAST_ORANGE}',
+                            'cursor': 'pointer'
+                        }
+                    ),
+                ], style={'display': 'flex', 'alignItems': 'center', 'flexWrap': 'wrap', 'gap': '15px'}),
+            ]
+        ),
+
+        # Loading indicator with Toast styling
         dcc.Loading(
             id="loading-weekly-report",
             type="default",
+            color=TOAST_ORANGE,
             children=html.Div(id='weekly-report-table')
         )
     ])
@@ -279,20 +630,44 @@ def weekly_report_layout():
     Input('url', 'pathname')
 )
 def display_page(pathname):
-    """Route pages based on URL"""
-    if pathname == '/weekly':
+    """Route pages based on URL (Toast POS structure)"""
+    # Map Toast-style routes to content
+    if pathname == '/sales-summary':
         return weekly_report_layout()
-    elif pathname == '/monthly':
+    elif pathname == '/sales-analytics':
         return html.Div([
-            html.H2("📆 Monthly Report"),
-            html.Hr(),
-            html.P("Coming soon...")
+            html.H2("Sales Analytics", style={'color': '#333'}),
+            html.Div(className="content-card", children=[
+                html.P("Detailed analytics coming soon...")
+            ])
         ])
-    elif pathname == '/trends':
+    elif pathname == '/sales-breakdown':
         return html.Div([
-            html.H2("📈 5-Year Trends"),
-            html.Hr(),
-            html.P("Coming soon...")
+            html.H2("Sales Breakdown", style={'color': '#333'}),
+            html.Div(className="content-card", children=[
+                html.P("Breakdown by product, category, etc. coming soon...")
+            ])
+        ])
+    elif pathname == '/overview':
+        return html.Div([
+            html.H2("Reports Overview", style={'color': '#333'}),
+            html.Div(className="content-card", children=[
+                html.P("Quick overview of all reports coming soon...")
+            ])
+        ])
+    elif pathname == '/orders':
+        return html.Div([
+            html.H2("Orders", style={'color': '#333'}),
+            html.Div(className="content-card", children=[
+                html.P("Order details coming soon...")
+            ])
+        ])
+    elif pathname == '/employee-performance':
+        return html.Div([
+            html.H2("Employee Performance", style={'color': '#333'}),
+            html.Div(className="content-card", children=[
+                html.P("Employee metrics coming soon...")
+            ])
         ])
     else:
         return home_layout()
@@ -383,7 +758,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
             'fontSize': '12px'
         },
         style_header={
-            'backgroundColor': '#FF6B9D',  # Snowflake pink
+            'backgroundColor': TOAST_ORANGE,  # Toast orange
             'color': 'white',
             'fontWeight': 'bold',
             'textAlign': 'center'
@@ -499,9 +874,98 @@ def update_weekly_report(fiscal_year, fiscal_week):
     )
 
     return html.Div([
-        dbc.Alert(f"Report generated in {calc_duration*1000:.0f}ms (cached data)", color="success"),
-        html.H4(f"FY{fiscal_year} Week {fiscal_week} - YoY Comparison"),
-        table
+        # Success message
+        html.Div(
+            style={
+                'backgroundColor': '#d4edda',
+                'border': '1px solid #c3e6cb',
+                'color': '#155724',
+                'padding': '12px 20px',
+                'borderRadius': '4px',
+                'marginBottom': '20px',
+                'fontSize': '14px'
+            },
+            children=[
+                html.I(className="fas fa-check-circle", style={'marginRight': '8px'}),
+                f"Report generated in {calc_duration*1000:.0f}ms (cached data)"
+            ]
+        ),
+
+        # Table card (Toast style)
+        html.Div(
+            className="content-card",
+            children=[
+                # Card header with title and actions
+                html.Div(
+                    style={
+                        'display': 'flex',
+                        'justifyContent': 'space-between',
+                        'alignItems': 'center',
+                        'marginBottom': '20px',
+                        'paddingBottom': '15px',
+                        'borderBottom': '1px solid #E0E0E0'
+                    },
+                    children=[
+                        html.H4(
+                            f"FY{fiscal_year} Week {fiscal_week} - Year over Year Comparison",
+                            style={'margin': '0', 'color': '#333'}
+                        ),
+                        html.Div([
+                            html.Button(
+                                [html.I(className="fas fa-sync-alt", style={'marginRight': '6px'}), "Refresh"],
+                                style={
+                                    'padding': '6px 12px',
+                                    'marginRight': '10px',
+                                    'fontSize': '13px',
+                                    'backgroundColor': 'white',
+                                    'border': '1px solid #E0E0E0',
+                                    'borderRadius': '4px',
+                                    'cursor': 'pointer'
+                                }
+                            ),
+                            html.Button(
+                                [html.I(className="fas fa-cog", style={'marginRight': '6px'}), "Settings"],
+                                style={
+                                    'padding': '6px 12px',
+                                    'marginRight': '10px',
+                                    'fontSize': '13px',
+                                    'backgroundColor': 'white',
+                                    'border': '1px solid #E0E0E0',
+                                    'borderRadius': '4px',
+                                    'cursor': 'pointer'
+                                }
+                            ),
+                            html.Button(
+                                [html.I(className="fas fa-envelope", style={'marginRight': '6px'}), "Email"],
+                                style={
+                                    'padding': '6px 12px',
+                                    'marginRight': '10px',
+                                    'fontSize': '13px',
+                                    'backgroundColor': 'white',
+                                    'border': '1px solid #E0E0E0',
+                                    'borderRadius': '4px',
+                                    'cursor': 'pointer'
+                                }
+                            ),
+                            html.Button(
+                                [html.I(className="fas fa-download", style={'marginRight': '6px'}), "Download"],
+                                style={
+                                    'padding': '6px 12px',
+                                    'fontSize': '13px',
+                                    'backgroundColor': 'white',
+                                    'border': '1px solid #E0E0E0',
+                                    'borderRadius': '4px',
+                                    'cursor': 'pointer'
+                                }
+                            ),
+                        ], style={'display': 'flex'})
+                    ]
+                ),
+
+                # Table
+                table
+            ]
+        )
     ])
 
 
