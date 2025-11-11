@@ -792,11 +792,6 @@ def update_weekly_report(fiscal_year, fiscal_week):
             {'name': 'Current ATV', 'id': 'Current_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
             {'name': 'Last ATV', 'id': 'Last_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
             {'name': 'ATV Var %', 'id': 'ATV_Var_Pct_Display', 'type': 'text'},
-            # Hidden columns for filtering
-            {'name': '', 'id': 'Weekly_Sales_Var_Pct', 'hideable': True, 'hidden': True},
-            {'name': '', 'id': 'FourWeek_Avg_Var_Pct', 'hideable': True, 'hidden': True},
-            {'name': '', 'id': 'Volume_Var_Pct', 'hideable': True, 'hidden': True},
-            {'name': '', 'id': 'ATV_Var_Pct', 'hideable': True, 'hidden': True},
         ],
         style_table={'overflowX': 'auto'},
         style_cell={
