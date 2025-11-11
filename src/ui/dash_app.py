@@ -888,24 +888,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
     )
 
     return html.Div([
-        # Success message
-        html.Div(
-            style={
-                'backgroundColor': '#d4edda',
-                'border': '1px solid #c3e6cb',
-                'color': '#155724',
-                'padding': '12px 20px',
-                'borderRadius': '4px',
-                'marginBottom': '20px',
-                'fontSize': '14px'
-            },
-            children=[
-                html.I(className="fas fa-check-circle", style={'marginRight': '8px'}),
-                f"Report generated in {calc_duration*1000:.0f}ms (cached data)"
-            ]
-        ),
-
-        # Table card (Toast style)
+        # Table card
         html.Div(
             className="content-card",
             children=[
