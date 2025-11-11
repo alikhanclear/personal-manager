@@ -224,16 +224,20 @@ def calculate_weekly_sales(
         on=['Company', 'Establishment'],
         how='outer',  # Keep all establishments even if no data in one year
         coalesce=True  # Merge join keys to avoid _right suffix columns
-    ).fill_null(0)
+    )
+
+    # Cast Decimal to Float64 BEFORE calculations (Decimal division throws errors)
+    result = result.with_columns([
+        pl.col('Current_Year_Sales').cast(pl.Float64),
+        pl.col('Last_Year_Sales').cast(pl.Float64),
+    ]).fill_null(0)
 
     # Calculate variance percentage (safe division)
     # Set variance to None if EITHER current or last year is 0/null (no valid comparison)
     result = result.with_columns([
         pl.when(
             (pl.col('Current_Year_Sales') == 0) |
-            (pl.col('Last_Year_Sales') == 0) |
-            pl.col('Current_Year_Sales').is_null() |
-            pl.col('Last_Year_Sales').is_null()
+            (pl.col('Last_Year_Sales') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
@@ -374,16 +378,20 @@ def calculate_4week_avg(
         on=['Company', 'Establishment'],
         how='outer',
         coalesce=True  # Merge join keys to avoid _right suffix columns
-    ).fill_null(0)
+    )
+
+    # Cast Decimal to Float64 BEFORE calculations (Decimal division throws errors)
+    result = result.with_columns([
+        pl.col('Current_Year_4W_Avg').cast(pl.Float64),
+        pl.col('Last_Year_4W_Avg').cast(pl.Float64),
+    ]).fill_null(0)
 
     # Calculate variance (safe division)
-    # Set variance to None if EITHER current or last year is 0/null (no valid comparison)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
         pl.when(
             (pl.col('Current_Year_4W_Avg') == 0) |
-            (pl.col('Last_Year_4W_Avg') == 0) |
-            pl.col('Current_Year_4W_Avg').is_null() |
-            pl.col('Last_Year_4W_Avg').is_null()
+            (pl.col('Last_Year_4W_Avg') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
@@ -441,16 +449,20 @@ def calculate_order_volumes(
         on=['Company', 'Establishment'],
         how='outer',
         coalesce=True  # Merge join keys to avoid _right suffix columns
-    ).fill_null(0)
+    )
 
-    # Calculate variance (safe division - avoid divide by zero or null values)
-    # Set variance to None if EITHER current or last year is 0/null (no valid comparison)
+    # Cast to Float64 BEFORE calculations (safe division)
+    result = result.with_columns([
+        pl.col('Current_Year_Vol').cast(pl.Float64),
+        pl.col('Last_Year_Vol').cast(pl.Float64),
+    ]).fill_null(0)
+
+    # Calculate variance (safe division - avoid divide by zero)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
         pl.when(
             (pl.col('Current_Year_Vol') == 0) |
-            (pl.col('Last_Year_Vol') == 0) |
-            pl.col('Current_Year_Vol').is_null() |
-            pl.col('Last_Year_Vol').is_null()
+            (pl.col('Last_Year_Vol') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
@@ -510,16 +522,20 @@ def calculate_atv(
         on=['Company', 'Establishment'],
         how='outer',
         coalesce=True  # Merge join keys to avoid _right suffix columns
-    ).fill_null(0)
+    )
+
+    # Cast Decimal to Float64 BEFORE calculations (Decimal division throws errors)
+    result = result.with_columns([
+        pl.col('Current_Year_ATV').cast(pl.Float64),
+        pl.col('Last_Year_ATV').cast(pl.Float64),
+    ]).fill_null(0)
 
     # Calculate variance (safe division)
-    # Set variance to None if EITHER current or last year is 0/null (no valid comparison)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
         pl.when(
             (pl.col('Current_Year_ATV') == 0) |
-            (pl.col('Last_Year_ATV') == 0) |
-            pl.col('Current_Year_ATV').is_null() |
-            pl.col('Last_Year_ATV').is_null()
+            (pl.col('Last_Year_ATV') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
@@ -668,13 +684,12 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     # Recalculate variances for totals with safe division
-    # Set variance to None if EITHER current or last year is 0/null
+    # Set variance to None if EITHER current or last year is 0
+    # (No need for null checks - data is Float64 with nulls filled)
     company_totals = company_totals.with_columns([
         pl.when(
             (pl.col('Current_Year_Sales') == 0) |
-            (pl.col('Last_Year_Sales') == 0) |
-            pl.col('Current_Year_Sales').is_null() |
-            pl.col('Last_Year_Sales').is_null()
+            (pl.col('Last_Year_Sales') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
@@ -682,9 +697,7 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_4W_Avg') == 0) |
-            (pl.col('Last_Year_4W_Avg') == 0) |
-            pl.col('Current_Year_4W_Avg').is_null() |
-            pl.col('Last_Year_4W_Avg').is_null()
+            (pl.col('Last_Year_4W_Avg') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
@@ -692,9 +705,7 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_Vol') == 0) |
-            (pl.col('Last_Year_Vol') == 0) |
-            pl.col('Current_Year_Vol').is_null() |
-            pl.col('Last_Year_Vol').is_null()
+            (pl.col('Last_Year_Vol') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
@@ -702,9 +713,7 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_ATV') == 0) |
-            (pl.col('Last_Year_ATV') == 0) |
-            pl.col('Current_Year_ATV').is_null() |
-            pl.col('Last_Year_ATV').is_null()
+            (pl.col('Last_Year_ATV') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
@@ -748,13 +757,12 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
     ]).drop('_dummy')
 
     # Recalculate variances with safe division
-    # Set variance to None if EITHER current or last year is 0/null
+    # Set variance to None if EITHER current or last year is 0
+    # (No need for null checks - data is Float64 with nulls filled)
     grand_total = grand_total.with_columns([
         pl.when(
             (pl.col('Current_Year_Sales') == 0) |
-            (pl.col('Last_Year_Sales') == 0) |
-            pl.col('Current_Year_Sales').is_null() |
-            pl.col('Last_Year_Sales').is_null()
+            (pl.col('Last_Year_Sales') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
@@ -762,9 +770,7 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_4W_Avg') == 0) |
-            (pl.col('Last_Year_4W_Avg') == 0) |
-            pl.col('Current_Year_4W_Avg').is_null() |
-            pl.col('Last_Year_4W_Avg').is_null()
+            (pl.col('Last_Year_4W_Avg') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
@@ -772,9 +778,7 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_Vol') == 0) |
-            (pl.col('Last_Year_Vol') == 0) |
-            pl.col('Current_Year_Vol').is_null() |
-            pl.col('Last_Year_Vol').is_null()
+            (pl.col('Last_Year_Vol') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
@@ -782,9 +786,7 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
 
         pl.when(
             (pl.col('Current_Year_ATV') == 0) |
-            (pl.col('Last_Year_ATV') == 0) |
-            pl.col('Current_Year_ATV').is_null() |
-            pl.col('Last_Year_ATV').is_null()
+            (pl.col('Last_Year_ATV') == 0)
         )
         .then(None)
         .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
