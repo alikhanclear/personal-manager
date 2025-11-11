@@ -226,21 +226,14 @@ def calculate_weekly_sales(
         coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance percentage (safe division - avoid divide by zero)
-    # Replace zeros with null to prevent division by zero
+    # Calculate variance percentage (safe division)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
-        pl.when(pl.col('Last_Year_Sales') == 0)
+        pl.when((pl.col('Current_Year_Sales') == 0) | (pl.col('Last_Year_Sales') == 0))
         .then(None)
-        .otherwise(pl.col('Last_Year_Sales'))
-        .alias('Last_Year_Sales_Safe')
+        .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
+        .alias('Weekly_Sales_Var_Pct')
     ])
-
-    result = result.with_columns([
-        (
-            (pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) /
-            pl.col('Last_Year_Sales_Safe')
-        ).alias('Weekly_Sales_Var_Pct')
-    ]).drop('Last_Year_Sales_Safe')
 
     return result
 
@@ -378,20 +371,14 @@ def calculate_4week_avg(
         coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance (safe division - avoid divide by zero)
+    # Calculate variance (safe division)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
-        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        pl.when((pl.col('Current_Year_4W_Avg') == 0) | (pl.col('Last_Year_4W_Avg') == 0))
         .then(None)
-        .otherwise(pl.col('Last_Year_4W_Avg'))
-        .alias('Last_Year_4W_Avg_Safe')
+        .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
+        .alias('FourWeek_Avg_Var_Pct')
     ])
-
-    result = result.with_columns([
-        (
-            (pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) /
-            pl.col('Last_Year_4W_Avg_Safe')
-        ).alias('FourWeek_Avg_Var_Pct')
-    ]).drop('Last_Year_4W_Avg_Safe')
 
     return result
 
@@ -446,20 +433,14 @@ def calculate_order_volumes(
         coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance (safe division - avoid divide by zero)
+    # Calculate variance (safe division - avoid divide by zero or null values)
+    # Set variance to None if EITHER current or last year is 0/null (no valid comparison)
     result = result.with_columns([
-        pl.when(pl.col('Last_Year_Vol') == 0)
+        pl.when((pl.col('Current_Year_Vol') == 0) | (pl.col('Last_Year_Vol') == 0))
         .then(None)
-        .otherwise(pl.col('Last_Year_Vol'))
-        .alias('Last_Year_Vol_Safe')
+        .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
+        .alias('Volume_Var_Pct')
     ])
-
-    result = result.with_columns([
-        (
-            (pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) /
-            pl.col('Last_Year_Vol_Safe')
-        ).alias('Volume_Var_Pct')
-    ]).drop('Last_Year_Vol_Safe')
 
     return result
 
@@ -516,20 +497,14 @@ def calculate_atv(
         coalesce=True  # Merge join keys to avoid _right suffix columns
     ).fill_null(0)
 
-    # Calculate variance (safe division - avoid divide by zero)
+    # Calculate variance (safe division)
+    # Set variance to None if EITHER current or last year is 0 (no valid comparison)
     result = result.with_columns([
-        pl.when(pl.col('Last_Year_ATV') == 0)
+        pl.when((pl.col('Current_Year_ATV') == 0) | (pl.col('Last_Year_ATV') == 0))
         .then(None)
-        .otherwise(pl.col('Last_Year_ATV'))
-        .alias('Last_Year_ATV_Safe')
+        .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
+        .alias('ATV_Var_Pct')
     ])
-
-    result = result.with_columns([
-        (
-            (pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) /
-            pl.col('Last_Year_ATV_Safe')
-        ).alias('ATV_Var_Pct')
-    ]).drop('Last_Year_ATV_Safe')
 
     return result
 
@@ -673,23 +648,24 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     # Recalculate variances for totals with safe division
+    # Set variance to None if EITHER current or last year is 0/null
     company_totals = company_totals.with_columns([
-        pl.when(pl.col('Last_Year_Sales') == 0)
+        pl.when((pl.col('Current_Year_Sales') == 0) | (pl.col('Last_Year_Sales') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
         .alias('Weekly_Sales_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        pl.when((pl.col('Current_Year_4W_Avg') == 0) | (pl.col('Last_Year_4W_Avg') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
         .alias('FourWeek_Avg_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_Vol') == 0)
+        pl.when((pl.col('Current_Year_Vol') == 0) | (pl.col('Last_Year_Vol') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
         .alias('Volume_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_ATV') == 0)
+        pl.when((pl.col('Current_Year_ATV') == 0) | (pl.col('Last_Year_ATV') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
         .alias('ATV_Var_Pct'),
@@ -732,23 +708,24 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
     ]).drop('_dummy')
 
     # Recalculate variances with safe division
+    # Set variance to None if EITHER current or last year is 0/null
     grand_total = grand_total.with_columns([
-        pl.when(pl.col('Last_Year_Sales') == 0)
+        pl.when((pl.col('Current_Year_Sales') == 0) | (pl.col('Last_Year_Sales') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
         .alias('Weekly_Sales_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        pl.when((pl.col('Current_Year_4W_Avg') == 0) | (pl.col('Last_Year_4W_Avg') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
         .alias('FourWeek_Avg_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_Vol') == 0)
+        pl.when((pl.col('Current_Year_Vol') == 0) | (pl.col('Last_Year_Vol') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
         .alias('Volume_Var_Pct'),
 
-        pl.when(pl.col('Last_Year_ATV') == 0)
+        pl.when((pl.col('Current_Year_ATV') == 0) | (pl.col('Last_Year_ATV') == 0))
         .then(None)
         .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
         .alias('ATV_Var_Pct'),
