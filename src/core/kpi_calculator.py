@@ -664,12 +664,27 @@ def add_company_totals(df: pl.DataFrame) -> pl.DataFrame:
         (pl.col('Last_Year_Sales').sum() / pl.col('Last_Year_Vol').sum()).alias('Last_Year_ATV'),
     ])
 
-    # Recalculate variances for totals
+    # Recalculate variances for totals with safe division
     company_totals = company_totals.with_columns([
-        ((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales')).alias('Weekly_Sales_Var_Pct'),
-        ((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg')).alias('FourWeek_Avg_Var_Pct'),
-        ((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol')).alias('Volume_Var_Pct'),
-        ((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV')).alias('ATV_Var_Pct'),
+        pl.when(pl.col('Last_Year_Sales') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
+        .alias('Weekly_Sales_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
+        .alias('FourWeek_Avg_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_Vol') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
+        .alias('Volume_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_ATV') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
+        .alias('ATV_Var_Pct'),
     ])
 
     # Add "Total" as Establishment name
@@ -708,12 +723,27 @@ def add_grand_total(df: pl.DataFrame) -> pl.DataFrame:
         (pl.col('Last_Year_Sales').sum() / pl.col('Last_Year_Vol').sum()).alias('Last_Year_ATV'),
     ]).drop('_dummy')
 
-    # Recalculate variances
+    # Recalculate variances with safe division
     grand_total = grand_total.with_columns([
-        ((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales')).alias('Weekly_Sales_Var_Pct'),
-        ((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg')).alias('FourWeek_Avg_Var_Pct'),
-        ((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol')).alias('Volume_Var_Pct'),
-        ((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV')).alias('ATV_Var_Pct'),
+        pl.when(pl.col('Last_Year_Sales') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_Sales') - pl.col('Last_Year_Sales')) / pl.col('Last_Year_Sales'))
+        .alias('Weekly_Sales_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_4W_Avg') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_4W_Avg') - pl.col('Last_Year_4W_Avg')) / pl.col('Last_Year_4W_Avg'))
+        .alias('FourWeek_Avg_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_Vol') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
+        .alias('Volume_Var_Pct'),
+
+        pl.when(pl.col('Last_Year_ATV') == 0)
+        .then(None)
+        .otherwise((pl.col('Current_Year_ATV') - pl.col('Last_Year_ATV')) / pl.col('Last_Year_ATV'))
+        .alias('ATV_Var_Pct'),
     ])
 
     # Add "Total" labels
