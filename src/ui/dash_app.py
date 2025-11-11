@@ -734,394 +734,394 @@ def update_weekly_report(fiscal_year, fiscal_week):
 
         # Format data for display
         formatted_report = report.with_columns([
-        # Convert to float for DataTable
-        pl.col('Current_Year_Sales').cast(pl.Float64),
-        pl.col('Last_Year_Sales').cast(pl.Float64),
-        pl.col('Current_Year_4W_Avg').cast(pl.Float64),
-        pl.col('Last_Year_4W_Avg').cast(pl.Float64),
-        pl.col('Current_Year_Vol').cast(pl.Float64),
-        pl.col('Last_Year_Vol').cast(pl.Float64),
-        pl.col('Current_Year_ATV').cast(pl.Float64),
-        pl.col('Last_Year_ATV').cast(pl.Float64),
-        # Variance percentages - convert to percentage (handle None/null properly)
-        pl.when(pl.col('Weekly_Sales_Var_Pct').is_null())
-        .then(None)
-        .otherwise(pl.col('Weekly_Sales_Var_Pct') * 100)
-        .alias('Weekly_Sales_Var_Pct'),
+            # Convert to float for DataTable
+            pl.col('Current_Year_Sales').cast(pl.Float64),
+            pl.col('Last_Year_Sales').cast(pl.Float64),
+            pl.col('Current_Year_4W_Avg').cast(pl.Float64),
+            pl.col('Last_Year_4W_Avg').cast(pl.Float64),
+            pl.col('Current_Year_Vol').cast(pl.Float64),
+            pl.col('Last_Year_Vol').cast(pl.Float64),
+            pl.col('Current_Year_ATV').cast(pl.Float64),
+            pl.col('Last_Year_ATV').cast(pl.Float64),
+            # Variance percentages - convert to percentage (handle None/null properly)
+            pl.when(pl.col('Weekly_Sales_Var_Pct').is_null())
+            .then(None)
+            .otherwise(pl.col('Weekly_Sales_Var_Pct') * 100)
+            .alias('Weekly_Sales_Var_Pct'),
 
-        pl.when(pl.col('FourWeek_Avg_Var_Pct').is_null())
-        .then(None)
-        .otherwise(pl.col('FourWeek_Avg_Var_Pct') * 100)
-        .alias('FourWeek_Avg_Var_Pct'),
+            pl.when(pl.col('FourWeek_Avg_Var_Pct').is_null())
+            .then(None)
+            .otherwise(pl.col('FourWeek_Avg_Var_Pct') * 100)
+            .alias('FourWeek_Avg_Var_Pct'),
 
-        pl.when(pl.col('Volume_Var_Pct').is_null())
-        .then(None)
-        .otherwise(pl.col('Volume_Var_Pct') * 100)
-        .alias('Volume_Var_Pct'),
+            pl.when(pl.col('Volume_Var_Pct').is_null())
+            .then(None)
+            .otherwise(pl.col('Volume_Var_Pct') * 100)
+            .alias('Volume_Var_Pct'),
 
-        pl.when(pl.col('ATV_Var_Pct').is_null())
-        .then(None)
-        .otherwise(pl.col('ATV_Var_Pct') * 100)
-        .alias('ATV_Var_Pct'),
-    ])
+            pl.when(pl.col('ATV_Var_Pct').is_null())
+            .then(None)
+            .otherwise(pl.col('ATV_Var_Pct') * 100)
+            .alias('ATV_Var_Pct'),
+        ])
 
-    # Convert to pandas for DataTable
-    df_pandas = formatted_report.to_pandas()
+        # Convert to pandas for DataTable
+        df_pandas = formatted_report.to_pandas()
 
-    # First, identify which cells should hide variance (before converting to blanks)
-    numeric_cols = ['Current_Year_Sales', 'Last_Year_Sales', 'Current_Year_4W_Avg', 'Last_Year_4W_Avg',
-                    'Current_Year_Vol', 'Last_Year_Vol', 'Current_Year_ATV', 'Last_Year_ATV']
+        # First, identify which cells should hide variance (before converting to blanks)
+        numeric_cols = ['Current_Year_Sales', 'Last_Year_Sales', 'Current_Year_4W_Avg', 'Last_Year_4W_Avg',
+                        'Current_Year_Vol', 'Last_Year_Vol', 'Current_Year_ATV', 'Last_Year_ATV']
 
-    variance_mapping = {
-        'Weekly_Sales_Var_Pct': ('Current_Year_Sales', 'Last_Year_Sales'),
-        'FourWeek_Avg_Var_Pct': ('Current_Year_4W_Avg', 'Last_Year_4W_Avg'),
-        'Volume_Var_Pct': ('Current_Year_Vol', 'Last_Year_Vol'),
-        'ATV_Var_Pct': ('Current_Year_ATV', 'Last_Year_ATV')
-    }
+        variance_mapping = {
+            'Weekly_Sales_Var_Pct': ('Current_Year_Sales', 'Last_Year_Sales'),
+            'FourWeek_Avg_Var_Pct': ('Current_Year_4W_Avg', 'Last_Year_4W_Avg'),
+            'Volume_Var_Pct': ('Current_Year_Vol', 'Last_Year_Vol'),
+            'ATV_Var_Pct': ('Current_Year_ATV', 'Last_Year_ATV')
+        }
 
-    # Set variance to None where either current or last year is 0/null (BEFORE converting to blanks)
-    for var_col, (current_col, last_col) in variance_mapping.items():
-        mask = (df_pandas[current_col] == 0) | (df_pandas[last_col] == 0) | \
-               df_pandas[current_col].isna() | df_pandas[last_col].isna()
-        df_pandas.loc[mask, var_col] = None
+        # Set variance to None where either current or last year is 0/null (BEFORE converting to blanks)
+        for var_col, (current_col, last_col) in variance_mapping.items():
+            mask = (df_pandas[current_col] == 0) | (df_pandas[last_col] == 0) | \
+                   df_pandas[current_col].isna() | df_pandas[last_col].isna()
+            df_pandas.loc[mask, var_col] = None
 
-    # Now replace 0 values with blank for display
-    for col in numeric_cols:
-        df_pandas[col] = df_pandas[col].replace(0, '')
+        # Now replace 0 values with blank for display
+        for col in numeric_cols:
+            df_pandas[col] = df_pandas[col].replace(0, '')
 
-    # Group company names - show company only on first row of each group
-    # and indent establishment names
-    prev_company = None
-    for idx in df_pandas.index:
-        current_company = df_pandas.loc[idx, 'Company']
+        # Group company names - show company only on first row of each group
+        # and indent establishment names
+        prev_company = None
+        for idx in df_pandas.index:
+            current_company = df_pandas.loc[idx, 'Company']
 
-        # Indent establishment name
-        df_pandas.loc[idx, 'Establishment'] = '    ' + df_pandas.loc[idx, 'Establishment']
+            # Indent establishment name
+            df_pandas.loc[idx, 'Establishment'] = '    ' + df_pandas.loc[idx, 'Establishment']
 
-        # Blank out company name if same as previous row
-        if current_company == prev_company:
-            df_pandas.loc[idx, 'Company'] = ''
-        prev_company = current_company
+            # Blank out company name if same as previous row
+            if current_company == prev_company:
+                df_pandas.loc[idx, 'Company'] = ''
+            prev_company = current_company
 
-    # Create display columns for variance percentages with bracket notation for negatives
-    # Don't show variance or bars if variance is None (already handled above)
-    for var_col, (current_col, last_col) in variance_mapping.items():
-        df_pandas[f'{var_col}_Display'] = df_pandas.apply(
-            lambda row: '' if (row[current_col] == '' or row[last_col] == '' or pd.isna(row[var_col]))
-                        else (f'({abs(row[var_col]):.2f})' if row[var_col] < 0 else f'{row[var_col]:.2f}'),
-            axis=1
+        # Create display columns for variance percentages with bracket notation for negatives
+        # Don't show variance or bars if variance is None (already handled above)
+        for var_col, (current_col, last_col) in variance_mapping.items():
+            df_pandas[f'{var_col}_Display'] = df_pandas.apply(
+                lambda row: '' if (row[current_col] == '' or row[last_col] == '' or pd.isna(row[var_col]))
+                            else (f'({abs(row[var_col]):.2f})' if row[var_col] < 0 else f'{row[var_col]:.2f}'),
+                axis=1
+            )
+
+        # Create DataTable with conditional formatting
+        table = dash_table.DataTable(
+            data=df_pandas.to_dict('records'),
+            columns=[
+                {'name': 'Company', 'id': 'Company'},
+                {'name': 'Establishment', 'id': 'Establishment'},
+                {'name': 'Current Year Sales', 'id': 'Current_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': 'Last Year Sales', 'id': 'Last_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': 'Sales Var %', 'id': 'Weekly_Sales_Var_Pct_Display', 'type': 'text'},
+                {'name': 'Current 4W Avg', 'id': 'Current_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': 'Last 4W Avg', 'id': 'Last_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': '4W Avg Var %', 'id': 'FourWeek_Avg_Var_Pct_Display', 'type': 'text'},
+                {'name': 'Current Vol', 'id': 'Current_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': 'Last Vol', 'id': 'Last_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
+                {'name': 'Vol Var %', 'id': 'Volume_Var_Pct_Display', 'type': 'text'},
+                {'name': 'Current ATV', 'id': 'Current_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+                {'name': 'Last ATV', 'id': 'Last_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
+                {'name': 'ATV Var %', 'id': 'ATV_Var_Pct_Display', 'type': 'text'},
+            ],
+            style_table={'overflowX': 'auto'},
+            style_cell={
+                'textAlign': 'left',
+                'padding': '10px',
+                'fontFamily': 'Roboto, sans-serif',
+                'fontSize': '12px'
+            },
+            style_header={
+                'color': '#000000',  # Black text
+                'fontWeight': 'bold',
+                'textAlign': 'center',
+                'fontFamily': 'Inter, sans-serif'
+            },
+            style_data_conditional=(
+                # Data bars using diverging color scale (Power BI style)
+                # Bars are 41% height, centered vertically, text right-aligned
+                # Green bars: #00B050 (positive variance), Red bars: #FF0000 (negative variance)
+                # Text color: Black for all values
+                # Create gradient bars for positive values (green on right side)
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {i} && {{Weekly_Sales_Var_Pct}} < {i+5}',
+                            'column_id': 'Weekly_Sales_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                # Negative values (red on left side)
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {-i-5} && {{Weekly_Sales_Var_Pct}} < {-i}',
+                            'column_id': 'Weekly_Sales_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                # Repeat for other variance columns
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {i} && {{FourWeek_Avg_Var_Pct}} < {i+5}',
+                            'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {-i-5} && {{FourWeek_Avg_Pct}} < {-i}',
+                            'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{Volume_Var_Pct}} >= {i} && {{Volume_Var_Pct}} < {i+5}',
+                            'column_id': 'Volume_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{Volume_Var_Pct}} >= {-i-5} && {{Volume_Var_Pct}} < {-i}',
+                            'column_id': 'Volume_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{ATV_Var_Pct}} >= {i} && {{ATV_Var_Pct}} < {i+5}',
+                            'column_id': 'ATV_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                [
+                    {
+                        'if': {
+                            'filter_query': f'{{ATV_Var_Pct}} >= {-i-5} && {{ATV_Var_Pct}} < {-i}',
+                            'column_id': 'ATV_Var_Pct_Display'
+                        },
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
+                        'color': '#000000',
+                        'fontWeight': 'bold',
+                        'textAlign': 'right'
+                    }
+                    for i in range(0, 100, 5)
+                ] +
+                # Override rules: Remove ALL bars when display value is blank OR variance is 0
+                # These come last so they override any bar styling above
+                [
+                    {
+                        'if': {
+                            'filter_query': '{Weekly_Sales_Var_Pct_Display} = ""',
+                            'column_id': 'Weekly_Sales_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{Weekly_Sales_Var_Pct} is blank',
+                            'column_id': 'Weekly_Sales_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{FourWeek_Avg_Var_Pct_Display} = ""',
+                            'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{FourWeek_Avg_Var_Pct} is blank',
+                            'column_id': 'FourWeek_Avg_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{Volume_Var_Pct_Display} = ""',
+                            'column_id': 'Volume_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{Volume_Var_Pct} is blank',
+                            'column_id': 'Volume_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{ATV_Var_Pct_Display} = ""',
+                            'column_id': 'ATV_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{ATV_Var_Pct} is blank',
+                            'column_id': 'ATV_Var_Pct_Display'
+                        },
+                        'background': 'white',
+                        'color': '#000000',
+                        'textAlign': 'right'
+                    },
+                ]
+            ),
+            sort_action='native',  # Enable sorting
+            filter_action='native',  # Enable filtering
+            page_action='native',  # Enable pagination
+            page_size=20,  # Rows per page
+            export_format='xlsx',  # Enable Excel export
+            export_headers='display',
         )
 
-    # Create DataTable with conditional formatting
-    table = dash_table.DataTable(
-        data=df_pandas.to_dict('records'),
-        columns=[
-            {'name': 'Company', 'id': 'Company'},
-            {'name': 'Establishment', 'id': 'Establishment'},
-            {'name': 'Current Year Sales', 'id': 'Current_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Last Year Sales', 'id': 'Last_Year_Sales', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Sales Var %', 'id': 'Weekly_Sales_Var_Pct_Display', 'type': 'text'},
-            {'name': 'Current 4W Avg', 'id': 'Current_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Last 4W Avg', 'id': 'Last_Year_4W_Avg', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': '4W Avg Var %', 'id': 'FourWeek_Avg_Var_Pct_Display', 'type': 'text'},
-            {'name': 'Current Vol', 'id': 'Current_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Last Vol', 'id': 'Last_Year_Vol', 'type': 'numeric', 'format': {'specifier': ',.0f'}},
-            {'name': 'Vol Var %', 'id': 'Volume_Var_Pct_Display', 'type': 'text'},
-            {'name': 'Current ATV', 'id': 'Current_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
-            {'name': 'Last ATV', 'id': 'Last_Year_ATV', 'type': 'numeric', 'format': {'specifier': '.2f'}},
-            {'name': 'ATV Var %', 'id': 'ATV_Var_Pct_Display', 'type': 'text'},
-        ],
-        style_table={'overflowX': 'auto'},
-        style_cell={
-            'textAlign': 'left',
-            'padding': '10px',
-            'fontFamily': 'Roboto, sans-serif',
-            'fontSize': '12px'
-        },
-        style_header={
-            'color': '#000000',  # Black text
-            'fontWeight': 'bold',
-            'textAlign': 'center',
-            'fontFamily': 'Inter, sans-serif'
-        },
-        style_data_conditional=(
-            # Data bars using diverging color scale (Power BI style)
-            # Bars are 41% height, centered vertically, text right-aligned
-            # Green bars: #00B050 (positive variance), Red bars: #FF0000 (negative variance)
-            # Text color: Black for all values
-            # Create gradient bars for positive values (green on right side)
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {i} && {{Weekly_Sales_Var_Pct}} < {i+5}',
-                        'column_id': 'Weekly_Sales_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            # Negative values (red on left side)
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{Weekly_Sales_Var_Pct}} >= {-i-5} && {{Weekly_Sales_Var_Pct}} < {-i}',
-                        'column_id': 'Weekly_Sales_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            # Repeat for other variance columns
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {i} && {{FourWeek_Avg_Var_Pct}} < {i+5}',
-                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{FourWeek_Avg_Var_Pct}} >= {-i-5} && {{FourWeek_Avg_Pct}} < {-i}',
-                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{Volume_Var_Pct}} >= {i} && {{Volume_Var_Pct}} < {i+5}',
-                        'column_id': 'Volume_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{Volume_Var_Pct}} >= {-i-5} && {{Volume_Var_Pct}} < {-i}',
-                        'column_id': 'Volume_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{ATV_Var_Pct}} >= {i} && {{ATV_Var_Pct}} < {i+5}',
-                        'column_id': 'ATV_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            [
-                {
-                    'if': {
-                        'filter_query': f'{{ATV_Var_Pct}} >= {-i-5} && {{ATV_Var_Pct}} < {-i}',
-                        'column_id': 'ATV_Var_Pct_Display'
-                    },
-                    'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'color': '#000000',
-                    'fontWeight': 'bold',
-                    'textAlign': 'right'
-                }
-                for i in range(0, 100, 5)
-            ] +
-            # Override rules: Remove ALL bars when display value is blank OR variance is 0
-            # These come last so they override any bar styling above
-            [
-                {
-                    'if': {
-                        'filter_query': '{Weekly_Sales_Var_Pct_Display} = ""',
-                        'column_id': 'Weekly_Sales_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{Weekly_Sales_Var_Pct} is blank',
-                        'column_id': 'Weekly_Sales_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{FourWeek_Avg_Var_Pct_Display} = ""',
-                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{FourWeek_Avg_Var_Pct} is blank',
-                        'column_id': 'FourWeek_Avg_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{Volume_Var_Pct_Display} = ""',
-                        'column_id': 'Volume_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{Volume_Var_Pct} is blank',
-                        'column_id': 'Volume_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{ATV_Var_Pct_Display} = ""',
-                        'column_id': 'ATV_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-                {
-                    'if': {
-                        'filter_query': '{ATV_Var_Pct} is blank',
-                        'column_id': 'ATV_Var_Pct_Display'
-                    },
-                    'background': 'white',
-                    'color': '#000000',
-                    'textAlign': 'right'
-                },
-            ]
-        ),
-        sort_action='native',  # Enable sorting
-        filter_action='native',  # Enable filtering
-        page_action='native',  # Enable pagination
-        page_size=20,  # Rows per page
-        export_format='xlsx',  # Enable Excel export
-        export_headers='display',
-    )
+        return html.Div([
+            # Table card
+            html.Div(
+                className="content-card",
+                children=[
+                    # Card header with title and actions
+                    html.Div(
+                        style={
+                            'display': 'flex',
+                            'justifyContent': 'space-between',
+                            'alignItems': 'center',
+                            'marginBottom': '20px',
+                            'paddingBottom': '15px',
+                            'borderBottom': '1px solid #E0E0E0'
+                        },
+                        children=[
+                            html.H4(
+                                f"FY{fiscal_year} Week {fiscal_week} - Year over Year Comparison",
+                                style={'margin': '0', 'color': '#333'}
+                            ),
+                            html.Div([
+                                html.Button(
+                                    [html.I(className="fas fa-sync-alt", style={'marginRight': '6px'}), "Refresh"],
+                                    style={
+                                        'padding': '6px 12px',
+                                        'marginRight': '10px',
+                                        'fontSize': '13px',
+                                        'backgroundColor': 'white',
+                                        'border': '1px solid #E0E0E0',
+                                        'borderRadius': '4px',
+                                        'cursor': 'pointer',
+                                        'transition': 'all 200ms ease'
+                                    }
+                                ),
+                                html.Button(
+                                    [html.I(className="fas fa-cog", style={'marginRight': '6px'}), "Settings"],
+                                    style={
+                                        'padding': '6px 12px',
+                                        'marginRight': '10px',
+                                        'fontSize': '13px',
+                                        'backgroundColor': 'white',
+                                        'border': '1px solid #E0E0E0',
+                                        'borderRadius': '4px',
+                                        'cursor': 'pointer',
+                                        'transition': 'all 200ms ease'
+                                    }
+                                ),
+                                html.Button(
+                                    [html.I(className="fas fa-envelope", style={'marginRight': '6px'}), "Email"],
+                                    style={
+                                        'padding': '6px 12px',
+                                        'marginRight': '10px',
+                                        'fontSize': '13px',
+                                        'backgroundColor': 'white',
+                                        'border': '1px solid #E0E0E0',
+                                        'borderRadius': '4px',
+                                        'cursor': 'pointer',
+                                        'transition': 'all 200ms ease'
+                                    }
+                                ),
+                                html.Button(
+                                    [html.I(className="fas fa-download", style={'marginRight': '6px'}), "Download"],
+                                    style={
+                                        'padding': '6px 12px',
+                                        'fontSize': '13px',
+                                        'backgroundColor': 'white',
+                                        'border': '1px solid #E0E0E0',
+                                        'borderRadius': '4px',
+                                        'cursor': 'pointer',
+                                        'transition': 'all 200ms ease'
+                                    }
+                                ),
+                            ], style={'display': 'flex'})
+                        ]
+                    ),
 
-    return html.Div([
-        # Table card
-        html.Div(
-            className="content-card",
-            children=[
-                # Card header with title and actions
-                html.Div(
-                    style={
-                        'display': 'flex',
-                        'justifyContent': 'space-between',
-                        'alignItems': 'center',
-                        'marginBottom': '20px',
-                        'paddingBottom': '15px',
-                        'borderBottom': '1px solid #E0E0E0'
-                    },
-                    children=[
-                        html.H4(
-                            f"FY{fiscal_year} Week {fiscal_week} - Year over Year Comparison",
-                            style={'margin': '0', 'color': '#333'}
-                        ),
-                        html.Div([
-                            html.Button(
-                                [html.I(className="fas fa-sync-alt", style={'marginRight': '6px'}), "Refresh"],
-                                style={
-                                    'padding': '6px 12px',
-                                    'marginRight': '10px',
-                                    'fontSize': '13px',
-                                    'backgroundColor': 'white',
-                                    'border': '1px solid #E0E0E0',
-                                    'borderRadius': '4px',
-                                    'cursor': 'pointer',
-                                    'transition': 'all 200ms ease'
-                                }
-                            ),
-                            html.Button(
-                                [html.I(className="fas fa-cog", style={'marginRight': '6px'}), "Settings"],
-                                style={
-                                    'padding': '6px 12px',
-                                    'marginRight': '10px',
-                                    'fontSize': '13px',
-                                    'backgroundColor': 'white',
-                                    'border': '1px solid #E0E0E0',
-                                    'borderRadius': '4px',
-                                    'cursor': 'pointer',
-                                    'transition': 'all 200ms ease'
-                                }
-                            ),
-                            html.Button(
-                                [html.I(className="fas fa-envelope", style={'marginRight': '6px'}), "Email"],
-                                style={
-                                    'padding': '6px 12px',
-                                    'marginRight': '10px',
-                                    'fontSize': '13px',
-                                    'backgroundColor': 'white',
-                                    'border': '1px solid #E0E0E0',
-                                    'borderRadius': '4px',
-                                    'cursor': 'pointer',
-                                    'transition': 'all 200ms ease'
-                                }
-                            ),
-                            html.Button(
-                                [html.I(className="fas fa-download", style={'marginRight': '6px'}), "Download"],
-                                style={
-                                    'padding': '6px 12px',
-                                    'fontSize': '13px',
-                                    'backgroundColor': 'white',
-                                    'border': '1px solid #E0E0E0',
-                                    'borderRadius': '4px',
-                                    'cursor': 'pointer',
-                                    'transition': 'all 200ms ease'
-                                }
-                            ),
-                        ], style={'display': 'flex'})
-                    ]
-                ),
-
-                # Table
-                table
-            ]
-        )
-    ])
+                    # Table
+                    table
+                ]
+            )
+        ])
 
     except Exception as e:
         import traceback
