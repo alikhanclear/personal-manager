@@ -53,6 +53,20 @@ def test_variance_formula():
             'expected_variance': (120 - 100) / 100,  # 0.20
             'should_be_none': False
         },
+        {
+            'name': 'Current = null, Last has value',
+            'current': None,
+            'last': 100,
+            'expected_variance': None,
+            'should_be_none': True
+        },
+        {
+            'name': 'Current has value, Last = null',
+            'current': 100,
+            'last': None,
+            'expected_variance': None,
+            'should_be_none': True
+        },
     ]
 
     # Create dataframe
@@ -68,7 +82,12 @@ def test_variance_formula():
 
     # Apply the variance formula (matching our KPI calculator logic)
     df = df.with_columns([
-        pl.when((pl.col('Current_Year_Vol') == 0) | (pl.col('Last_Year_Vol') == 0))
+        pl.when(
+            (pl.col('Current_Year_Vol') == 0) |
+            (pl.col('Last_Year_Vol') == 0) |
+            pl.col('Current_Year_Vol').is_null() |
+            pl.col('Last_Year_Vol').is_null()
+        )
         .then(None)
         .otherwise((pl.col('Current_Year_Vol') - pl.col('Last_Year_Vol')) / pl.col('Last_Year_Vol'))
         .alias('Volume_Var_Pct')
