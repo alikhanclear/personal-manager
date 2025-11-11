@@ -742,11 +742,26 @@ def update_weekly_report(fiscal_year, fiscal_week):
         pl.col('Last_Year_Vol').cast(pl.Float64),
         pl.col('Current_Year_ATV').cast(pl.Float64),
         pl.col('Last_Year_ATV').cast(pl.Float64),
-        # Variance percentages - convert to percentage
-        (pl.col('Weekly_Sales_Var_Pct') * 100).alias('Weekly_Sales_Var_Pct'),
-        (pl.col('FourWeek_Avg_Var_Pct') * 100).alias('FourWeek_Avg_Var_Pct'),
-        (pl.col('Volume_Var_Pct') * 100).alias('Volume_Var_Pct'),
-        (pl.col('ATV_Var_Pct') * 100).alias('ATV_Var_Pct'),
+        # Variance percentages - convert to percentage (handle None/null properly)
+        pl.when(pl.col('Weekly_Sales_Var_Pct').is_null())
+        .then(None)
+        .otherwise(pl.col('Weekly_Sales_Var_Pct') * 100)
+        .alias('Weekly_Sales_Var_Pct'),
+
+        pl.when(pl.col('FourWeek_Avg_Var_Pct').is_null())
+        .then(None)
+        .otherwise(pl.col('FourWeek_Avg_Var_Pct') * 100)
+        .alias('FourWeek_Avg_Var_Pct'),
+
+        pl.when(pl.col('Volume_Var_Pct').is_null())
+        .then(None)
+        .otherwise(pl.col('Volume_Var_Pct') * 100)
+        .alias('Volume_Var_Pct'),
+
+        pl.when(pl.col('ATV_Var_Pct').is_null())
+        .then(None)
+        .otherwise(pl.col('ATV_Var_Pct') * 100)
+        .alias('ATV_Var_Pct'),
     ])
 
     # Convert to pandas for DataTable
