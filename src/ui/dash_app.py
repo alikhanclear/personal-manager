@@ -752,6 +752,12 @@ def update_weekly_report(fiscal_year, fiscal_week):
     # Convert to pandas for DataTable
     df_pandas = formatted_report.to_pandas()
 
+    # Replace 0 values with blank for better readability
+    numeric_cols = ['Current_Year_Sales', 'Last_Year_Sales', 'Current_Year_4W_Avg', 'Last_Year_4W_Avg',
+                    'Current_Year_Vol', 'Last_Year_Vol', 'Current_Year_ATV', 'Last_Year_ATV']
+    for col in numeric_cols:
+        df_pandas[col] = df_pandas[col].replace(0, '')
+
     # Group company names - show company only on first row of each group
     # and indent establishment names
     prev_company = None
@@ -767,12 +773,23 @@ def update_weekly_report(fiscal_year, fiscal_week):
         prev_company = current_company
 
     # Create display columns for variance percentages with bracket notation for negatives
+    # Don't show variance or bars if last year value is 0 (no comparison possible)
     # Keep numeric columns for filtering, add text columns for display
-    variance_cols = ['Weekly_Sales_Var_Pct', 'FourWeek_Avg_Var_Pct', 'Volume_Var_Pct', 'ATV_Var_Pct']
-    for col in variance_cols:
-        df_pandas[f'{col}_Display'] = df_pandas[col].apply(
-            lambda x: f'({abs(x):.2f})' if x < 0 else f'{x:.2f}'
+    variance_mapping = {
+        'Weekly_Sales_Var_Pct': 'Last_Year_Sales',
+        'FourWeek_Avg_Var_Pct': 'Last_Year_4W_Avg',
+        'Volume_Var_Pct': 'Last_Year_Vol',
+        'ATV_Var_Pct': 'Last_Year_ATV'
+    }
+
+    for var_col, base_col in variance_mapping.items():
+        df_pandas[f'{var_col}_Display'] = df_pandas.apply(
+            lambda row: '' if row[base_col] == '' or row[base_col] == 0
+                        else (f'({abs(row[var_col]):.2f})' if row[var_col] < 0 else f'{row[var_col]:.2f}'),
+            axis=1
         )
+        # Set numeric variance to None where base is 0 (for conditional formatting to ignore)
+        df_pandas.loc[df_pandas[base_col] == '', var_col] = None
 
     # Create DataTable with conditional formatting
     table = dash_table.DataTable(
