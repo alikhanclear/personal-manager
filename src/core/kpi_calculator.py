@@ -614,8 +614,17 @@ def calculate_weekly_report(
     # Fill nulls with 0
     result = result.fill_null(0)
 
-    # Sort by Company then Establishment
-    result = result.sort(['Company', 'Establishment'])
+    # Sort by Company (custom order: SNOWFLAKE, STRT SND, SKYVIEW) then Establishment
+    # Create a sort order column
+    result = result.with_columns([
+        pl.when(pl.col('Company') == 'SNOWFLAKE').then(1)
+        .when(pl.col('Company') == 'STRT SND').then(2)
+        .when(pl.col('Company') == 'SKYVIEW').then(3)
+        .otherwise(4)
+        .alias('_sort_order')
+    ])
+
+    result = result.sort(['_sort_order', 'Establishment']).drop('_sort_order')
 
     return result
 

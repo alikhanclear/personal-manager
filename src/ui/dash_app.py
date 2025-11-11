@@ -752,6 +752,20 @@ def update_weekly_report(fiscal_year, fiscal_week):
     # Convert to pandas for DataTable
     df_pandas = formatted_report.to_pandas()
 
+    # Group company names - show company only on first row of each group
+    # and indent establishment names
+    prev_company = None
+    for idx in df_pandas.index:
+        current_company = df_pandas.loc[idx, 'Company']
+
+        # Indent establishment name
+        df_pandas.loc[idx, 'Establishment'] = '    ' + df_pandas.loc[idx, 'Establishment']
+
+        # Blank out company name if same as previous row
+        if current_company == prev_company:
+            df_pandas.loc[idx, 'Company'] = ''
+        prev_company = current_company
+
     # Create DataTable with conditional formatting
     table = dash_table.DataTable(
         data=df_pandas.to_dict('records'),
