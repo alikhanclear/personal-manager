@@ -801,7 +801,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
         },
         style_data_conditional=(
             # Data bars using diverging color scale (Power BI style)
-            # Bars are 40% height (vertically thin) but full horizontal length based on variance
+            # Bars are 20% height (very thin stripes) with gaps top and bottom
             # Green bars: #00B050 (positive variance), Red bars: #FF0000 (negative variance)
             # Text color: Black for all values
             # Create gradient bars for positive values (green on right side)
@@ -812,7 +812,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'Weekly_Sales_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -828,7 +828,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'Weekly_Sales_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -844,7 +844,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'FourWeek_Avg_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -859,7 +859,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'FourWeek_Avg_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -874,7 +874,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'Volume_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -889,7 +889,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'Volume_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -904,7 +904,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'ATV_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+2.5)*0.5}%, white {50 + (i+2.5)*0.5}%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
@@ -919,7 +919,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
                         'column_id': 'ATV_Var_Pct'
                     },
                     'background': f'linear-gradient(90deg, white 0%, white {50 - (i+2.5)*0.5}%, #FF0000 {50 - (i+2.5)*0.5}%, #FF0000 50%, white 50%)',
-                    'backgroundSize': '100% 40%',
+                    'backgroundSize': '100% 20%',
                     'backgroundPosition': 'center',
                     'backgroundRepeat': 'no-repeat',
                     'color': '#000000',
