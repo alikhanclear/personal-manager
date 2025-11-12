@@ -610,13 +610,16 @@ def update_weekly_report(fiscal_year, fiscal_week):
         return html.P("Please select a fiscal year and week")
 
     try:
-        calc_start = datetime.now()
+        overall_start = datetime.now()
+        print(f"\n[WEEKLY REPORT] Starting report generation for FY{fiscal_year} Week {fiscal_week}")
 
+        calc_start = datetime.now()
         # Calculate report using existing business logic
         report = calculate_weekly_report(df, fiscal_year=fiscal_year, fiscal_week=fiscal_week)
-
         calc_duration = (datetime.now() - calc_start).total_seconds()
+        print(f"  [CALC] calculate_weekly_report() took {calc_duration:.2f}s")
 
+        format_start = datetime.now()
         # Format data for display
         formatted_report = report.with_columns([
             # Convert to float for DataTable
@@ -651,7 +654,10 @@ def update_weekly_report(fiscal_year, fiscal_week):
         ])
 
         # Convert to pandas for DataTable
+        pandas_start = datetime.now()
         df_pandas = formatted_report.to_pandas()
+        pandas_duration = (datetime.now() - pandas_start).total_seconds()
+        print(f"  [PANDAS] Polars → Pandas conversion took {pandas_duration:.2f}s")
 
         # First, identify which cells should hide variance (before converting to blanks)
         numeric_cols = ['Current_Year_Sales', 'Last_Year_Sales', 'Current_Year_4W_Avg', 'Last_Year_4W_Avg',
@@ -676,6 +682,7 @@ def update_weekly_report(fiscal_year, fiscal_week):
 
         # Group company names - show company only on first row of each group
         # and indent establishment names
+        grouping_start = datetime.now()
         prev_company = None
         for idx in df_pandas.index:
             current_company = df_pandas.loc[idx, 'Company']
@@ -687,6 +694,8 @@ def update_weekly_report(fiscal_year, fiscal_week):
             if current_company == prev_company:
                 df_pandas.loc[idx, 'Company'] = ''
             prev_company = current_company
+        grouping_duration = (datetime.now() - grouping_start).total_seconds()
+        print(f"  [GROUPING] Company grouping loop took {grouping_duration:.2f}s")
 
         # Calculate max absolute value for each variance column (for relative bar scaling)
         # This makes bars "pop" more by scaling to the actual data range
@@ -714,14 +723,18 @@ def update_weekly_report(fiscal_year, fiscal_week):
 
         # Create display columns for variance percentages with bracket notation for negatives
         # Don't show variance or bars if variance is None (already handled above)
+        display_start = datetime.now()
         for var_col, (current_col, last_col) in variance_mapping.items():
             df_pandas[f'{var_col}_Display'] = df_pandas.apply(
                 lambda row: '' if (row[current_col] == '' or row[last_col] == '' or pd.isna(row[var_col]))
                             else (f'({abs(row[var_col]):.2f})' if row[var_col] < 0 else f'{row[var_col]:.2f}'),
                 axis=1
             )
+        display_duration = (datetime.now() - display_start).total_seconds()
+        print(f"  [DISPLAY] Creating display columns took {display_duration:.2f}s")
 
         # Create DataTable with conditional formatting
+        table_start = datetime.now()
         table = dash_table.DataTable(
             data=df_pandas.to_dict('records'),
             columns=[
@@ -1035,6 +1048,11 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 ]
             )
         ])
+
+        table_duration = (datetime.now() - table_start).total_seconds()
+        overall_duration = (datetime.now() - overall_start).total_seconds()
+        print(f"  [TABLE] DataTable creation took {table_duration:.2f}s")
+        print(f"  [TOTAL] Overall report generation took {overall_duration:.2f}s\n")
 
     except Exception as e:
         import traceback
