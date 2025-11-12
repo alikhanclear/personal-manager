@@ -121,39 +121,16 @@ app = dash.Dash(
 
 server = app.server  # For deployment
 
-# Serve static splash page
-from flask import send_file
-import os
-
-@server.route('/splash')
-def splash():
-    """Serve the loading splash page."""
-    splash_path = os.path.join(os.path.dirname(__file__), 'static', 'splash.html')
-    return send_file(splash_path)
-
 # Health check endpoint (for Fly.io and monitoring)
+from flask import jsonify
+
 @server.route('/health')
 def health_check():
     """Health check endpoint - returns OK only after data is loaded."""
     if 'transactions' in DATA_CACHE:
-        return {'status': 'healthy', 'rows': len(DATA_CACHE['transactions'])}, 200
+        return jsonify({'status': 'healthy', 'rows': len(DATA_CACHE['transactions'])}), 200
     else:
-        return {'status': 'loading'}, 503  # Service Unavailable until data loads
-
-# Redirect root to splash if data not loaded
-@server.before_request
-def check_data_loaded():
-    """Redirect to splash page if data is still loading."""
-    from flask import request, redirect
-
-    # Skip redirect for these paths
-    skip_paths = ['/splash', '/health', '/_dash', '/assets']
-    if any(request.path.startswith(path) for path in skip_paths):
-        return None
-
-    # If data not loaded and not already on splash, redirect
-    if 'transactions' not in DATA_CACHE and request.path != '/splash':
-        return redirect('/splash')
+        return jsonify({'status': 'loading'}), 503  # Service Unavailable until data loads
 
 
 # ============================================================================
