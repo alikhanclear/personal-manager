@@ -131,7 +131,7 @@ app = dash.Dash(
 server = app.server  # For deployment
 
 # Health check endpoint (for Fly.io and monitoring)
-from flask import jsonify, request
+from flask import jsonify
 
 @server.route('/health')
 def health_check():
@@ -140,75 +140,6 @@ def health_check():
         return jsonify({'status': 'healthy', 'rows': len(DATA_CACHE['transactions'])}), 200
     else:
         return jsonify({'status': 'loading'}), 503  # Service Unavailable until data loads
-
-@server.route('/refresh', methods=['POST'])
-def refresh_data():
-    """
-    Cache warmer endpoint - triggers data reload.
-
-    Call this daily at 9:30 AM (after AWS materialized view refreshes at 9:00 AM).
-
-    Security: Optional token authentication
-    Usage: curl -X POST https://casualhero-bi.fly.dev/refresh
-    """
-    import os
-
-    # Optional: Check authorization token
-    auth_token = request.headers.get('Authorization')
-    expected_token = os.getenv('REFRESH_TOKEN')  # Set via: fly secrets set REFRESH_TOKEN=your-secret-token
-
-    if expected_token and auth_token != f'Bearer {expected_token}':
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    try:
-        print("\n[REFRESH] Cache warmer triggered - reloading data...")
-        refresh_start = datetime.now()
-
-        # Clear old cache
-        DATA_CACHE.clear()
-        STATS_CACHE.clear()
-
-        # Reload transactions
-        from src.data.connector import get_db
-        from src.data.queries import query_all_transactions
-        from src.core.kpi_calculator import prepare_transaction_data
-
-        db = get_db()
-        raw_df = query_all_transactions(db, years=2)
-        prepared_df = prepare_transaction_data(raw_df)
-
-        # Re-cache data
-        DATA_CACHE['transactions'] = prepared_df
-        DATA_CACHE['last_refresh'] = datetime.now()
-
-        # Re-calculate stats
-        global STATS_CACHE
-        STATS_CACHE = {
-            'total_orders': prepared_df['Order_Number'].n_unique(),
-            'total_sales': prepared_df['Order_Net_Sales'].sum(),
-            'total_establishments': prepared_df['Establishment'].n_unique()
-        }
-
-        # Update global df variable (used by home_layout)
-        global df
-        df = prepared_df
-
-        refresh_duration = (datetime.now() - refresh_start).total_seconds()
-
-        print(f"[REFRESH] Complete! Reloaded {len(prepared_df):,} transactions in {refresh_duration:.1f}s")
-
-        return jsonify({
-            'status': 'success',
-            'rows': len(prepared_df),
-            'duration_seconds': refresh_duration,
-            'refreshed_at': DATA_CACHE['last_refresh'].isoformat()
-        }), 200
-
-    except Exception as e:
-        print(f"[REFRESH] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================
