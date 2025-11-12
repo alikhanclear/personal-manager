@@ -4,6 +4,7 @@
 
 # Core Data Processing
 polars>=0.20.0              # High-performance DataFrame library (5-10x faster than pandas)
+pandas>=2.0.0               # DataFrame library (needed for Dash DataTable conversion)
 duckdb>=0.10.0              # In-process SQL analytics database
 
 # Configuration
