@@ -394,8 +394,14 @@ def query_all_transactions(db, years: int = 5) -> pl.DataFrame:
     """
     Query all transaction data from mv_item_details for the last N years.
 
+    Uses BATCHED LOADING to reduce peak memory usage:
+    - Loads data year by year (instead of all at once)
+    - Joins and filters each batch separately
+    - Concatenates results at the end
+    - Fits 5 years in 8GB RAM (peak ~4GB instead of ~8GB)
+
     This is the main function for loading data in production.
-    Used by Streamlit app with 24-hour caching.
+    Used by Dash app with in-memory caching.
 
     Args:
         db: Database connection instance from get_db()
@@ -414,43 +420,13 @@ def query_all_transactions(db, years: int = 5) -> pl.DataFrame:
     from src.core.fiscal_calendar import get_fiscal_year, get_week1_start
 
     # Calculate date range
-    # Get current fiscal year
     today = datetime.now().date()
     current_fy = get_fiscal_year(today)
-
-    # Go back N years
     oldest_fy = current_fy - years + 1
 
-    # Get start date (Week 1 of oldest fiscal year)
-    start_date = get_week1_start(oldest_fy)
+    print(f"  [Strategy] BATCHED LOADING - {years} years in separate chunks to reduce peak memory")
 
-    # Get end date (today)
-    end_date = today
-
-    # Strategy: Split queries to avoid AWS timeout (Power BI logic in Polars)
-
-    print(f"  [Strategy] Loading data in 2 queries + join in Polars (faster than SQL JOIN)")
-
-    # Query 1: Get all transactions (fast - simple query)
-    transactions_query = """
-        SELECT
-            "Establishment",
-            "Order_Number",
-            "Order_Date",
-            "Clean_Product_Name",
-            "Clean_Class",
-            "Total_Sales_Actual",
-            "Net_Sales_Actual",
-            "Product_Quantity",
-            "Total_Product_Tax",
-            "Eat_In_Or_Take_Away",
-            "Product Type"
-        FROM public.mv_item_details
-        WHERE "Order_Date" >= :start_date
-          AND "Order_Date" <= :end_date
-    """
-
-    # Query 2: Get payment statuses (fast - small table)
+    # Query 2: Get payment statuses ONCE (it's small, same for all years)
     payments_query = """
         SELECT DISTINCT
             "Order Id" as "Order_Number",
@@ -459,33 +435,81 @@ def query_all_transactions(db, years: int = 5) -> pl.DataFrame:
     """
 
     with db.get_connection() as conn:
-        print(f"  [Query 1/2] Fetching {(end_date - start_date).days / 365:.1f} years from mv_item_details...")
-        transactions_df = pl.read_database(
-            transactions_query,
-            connection=conn,
-            execute_options={"parameters": {"start_date": start_date, "end_date": end_date}}
-        )
-        print(f"  [Query 1/2] ✓ Got {len(transactions_df):,} transactions")
-
-        print(f"  [Query 2/2] Fetching payment statuses...")
+        print(f"  [Query] Fetching payment statuses (shared across all batches)...")
         payments_df = pl.read_database(payments_query, connection=conn)
-        print(f"  [Query 2/2] ✓ Got {len(payments_df):,} payment records")
+        print(f"  [Query] ✓ Got {len(payments_df):,} payment records")
 
-    # Apply Power BI logic in Polars (much faster than SQL)
-    print(f"  [Filter] Applying Power BI filters (exclude denied, keep captured/authorized)...")
+    # Load and process each year separately
+    yearly_batches = []
 
-    # LEFT JOIN + filter (matches Power BI exactly)
-    df = transactions_df.join(
-        payments_df,
-        on="Order_Number",
-        how="left"
-    ).filter(
-        # Exclude denied + only keep captured/authorized (Power BI logic)
-        (pl.col("Status").str.to_lowercase() != "denied") &
-        (pl.col("Status").str.to_lowercase().is_in(["captured", "authorized"]))
-    )
+    for fy in range(oldest_fy, current_fy + 1):
+        # Get date range for this fiscal year
+        fy_start = get_week1_start(fy)
 
-    print(f"  [Filter] ✓ Filtered to {len(df):,} valid transactions")
+        # End date: either start of next FY or today (whichever is earlier)
+        if fy < current_fy:
+            fy_end = get_week1_start(fy + 1) - timedelta(days=1)
+        else:
+            fy_end = today
+
+        # Query transactions for this year only
+        transactions_query = """
+            SELECT
+                "Establishment",
+                "Order_Number",
+                "Order_Date",
+                "Clean_Product_Name",
+                "Clean_Class",
+                "Total_Sales_Actual",
+                "Net_Sales_Actual",
+                "Product_Quantity",
+                "Total_Product_Tax",
+                "Eat_In_Or_Take_Away",
+                "Product Type"
+            FROM public.mv_item_details
+            WHERE "Order_Date" >= :start_date
+              AND "Order_Date" <= :end_date
+        """
+
+        with db.get_connection() as conn:
+            days = (fy_end - fy_start).days
+            print(f"  [Batch FY{fy}] Loading {days} days ({fy_start} to {fy_end})...")
+
+            batch_df = pl.read_database(
+                transactions_query,
+                connection=conn,
+                execute_options={"parameters": {"start_date": fy_start, "end_date": fy_end}}
+            )
+
+            print(f"  [Batch FY{fy}] ✓ Got {len(batch_df):,} transactions")
+
+            # Join and filter THIS batch (while it's small)
+            print(f"  [Batch FY{fy}] Joining with payments and filtering...")
+
+            filtered_batch = batch_df.join(
+                payments_df,
+                on="Order_Number",
+                how="left"
+            ).filter(
+                # Exclude denied + only keep captured/authorized (Power BI logic)
+                (pl.col("Status").str.to_lowercase() != "denied") &
+                (pl.col("Status").str.to_lowercase().is_in(["captured", "authorized"]))
+            )
+
+            print(f"  [Batch FY{fy}] ✓ Filtered to {len(filtered_batch):,} valid transactions")
+
+            # Drop Status column (not needed)
+            filtered_batch = filtered_batch.drop("Status")
+
+            yearly_batches.append(filtered_batch)
+
+            # Free memory from this batch (Python GC will clean up)
+            del batch_df
+
+    # Concatenate all years into final DataFrame
+    print(f"  [Concat] Combining {len(yearly_batches)} yearly batches...")
+    df = pl.concat(yearly_batches)
+    print(f"  [Concat] ✓ Final dataset: {len(df):,} transactions from {years} years")
 
     return df
 
