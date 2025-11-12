@@ -104,6 +104,15 @@ print("Initializing CasualHero BI Platform...")
 df = load_transactions()
 print(f"Ready! Loaded {len(df):,} transactions")
 
+# Pre-calculate home page stats (cache once at startup)
+print("Pre-calculating dashboard stats...")
+STATS_CACHE = {
+    'total_orders': df['Order_Number'].n_unique(),
+    'total_sales': df['Order_Net_Sales'].sum(),
+    'total_establishments': df['Establishment'].n_unique()
+}
+print(f"Stats cached: {STATS_CACHE['total_orders']:,} orders, £{STATS_CACHE['total_sales']:,.0f} sales, {STATS_CACHE['total_establishments']} locations")
+
 
 # ============================================================================
 # Dash App Initialization
@@ -429,7 +438,7 @@ def home_layout():
                 children=[
                     html.I(className="fas fa-receipt", style={'fontSize': '40px', 'color': ACCENT_COLOR, 'marginBottom': '15px'}),
                     html.H5("Total Orders", style={'color': '#999', 'fontSize': '13px', 'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.5px'}),
-                    html.H2(f"{df['Order_Number'].n_unique():,}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
+                    html.H2(f"{STATS_CACHE['total_orders']:,}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
                 ]
             ),
             # Total Sales
@@ -439,7 +448,7 @@ def home_layout():
                 children=[
                     html.I(className="fas fa-pound-sign", style={'fontSize': '40px', 'color': '#28a745', 'marginBottom': '15px'}),
                     html.H5("Total Sales", style={'color': '#999', 'fontSize': '13px', 'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.5px'}),
-                    html.H2(f"£{df['Order_Net_Sales'].sum():,.0f}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
+                    html.H2(f"£{STATS_CACHE['total_sales']:,.0f}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
                 ]
             ),
             # Establishments
@@ -449,7 +458,7 @@ def home_layout():
                 children=[
                     html.I(className="fas fa-store", style={'fontSize': '40px', 'color': PRIMARY_COLOR, 'marginBottom': '15px'}),
                     html.H5("Locations", style={'color': '#999', 'fontSize': '13px', 'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.5px'}),
-                    html.H2(f"{df['Establishment'].n_unique()}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
+                    html.H2(f"{STATS_CACHE['total_establishments']}", style={'color': '#333', 'margin': '0', 'fontFamily': 'Roboto', 'fontSize': '32px'})
                 ]
             ),
         ], style={'display': 'flex', 'gap': '0', 'marginBottom': '30px'}),
