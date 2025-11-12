@@ -1,4 +1,4 @@
-# Dockerfile for CasualHero BI Platform (Streamlit)
+# Dockerfile for CasualHero BI Platform (Dash)
 # Base: Python 3.11 slim
 # Target: Fly.io deployment with 8GB RAM
 
@@ -9,9 +9,11 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    gcc \
+    g++ \
+    postgresql-client \
+    libpq-dev \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for caching)
@@ -23,22 +25,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/data
+# Create non-root user for security
+RUN useradd -m -u 1000 casualhero && chown -R casualhero:casualhero /app
+USER casualhero
 
-# Expose Streamlit port
-EXPOSE 8501
+# Expose port (Fly.io internal port)
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
 
 # Set environment variables
-ENV STREAMLIT_SERVER_PORT=8501 \
-    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
-    STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
-# Run Streamlit app
-CMD ["streamlit", "run", "src/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run with Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "src.ui.dash_app:server"]

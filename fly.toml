@@ -9,88 +9,29 @@ primary_region = "lhr"  # London region (closest to AWS RDS eu-west-2)
 
 [env]
   # Environment variables (non-sensitive)
-  STREAMLIT_SERVER_PORT = "8501"
-  STREAMLIT_SERVER_ADDRESS = "0.0.0.0"
-  STREAMLIT_SERVER_HEADLESS = "true"
-  STREAMLIT_BROWSER_GATHER_USAGE_STATS = "false"
+  PYTHONUNBUFFERED = "1"
 
 # Secrets (set via: fly secrets set KEY=value)
 # - DATABASE_URL: PostgreSQL connection string
 # - Other sensitive config
 
-[[services]]
-  internal_port = 8501
-  protocol = "tcp"
+[http_service]
+  internal_port = 8080
+  force_https = true
   auto_stop_machines = false  # Keep always-on (no auto-sleep)
   auto_start_machines = true
   min_machines_running = 1    # Always have 1 instance running
 
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-    force_https = true
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [services.concurrency]
+  [http_service.concurrency]
     type = "connections"
     hard_limit = 100
     soft_limit = 80
-
-  [[services.tcp_checks]]
-    interval = "30s"
-    timeout = "10s"
-    grace_period = "10s"
-
-  [[services.http_checks]]
-    interval = "30s"
-    timeout = "10s"
-    grace_period = "10s"
-    method = "get"
-    path = "/_stcore/health"  # Streamlit health check endpoint
-
-[http_service]
-  internal_port = 8501
-  force_https = true
-  auto_stop_machines = false
-  auto_start_machines = true
-  min_machines_running = 1
 
 # VM Resources
 [vm]
   cpu_kind = "shared"
   cpus = 2
-  memory = "8gb"  # 8GB RAM for 5 years of data (~39M rows)
-
-# Scheduled Tasks
-[[services.cron]]
-  # Cache warmer: Runs at 9:25 AM UTC daily (adjust timezone as needed)
-  # UK is UTC+0 (winter) or UTC+1 (summer DST)
-  # If UK office hours: 9:25 AM UK = 9:25 AM UTC (winter) or 8:25 AM UTC (summer)
-  # Using 8:25 AM UTC to cover BST (British Summer Time)
-  schedule = "25 8 * * *"  # 8:25 AM UTC = 9:25 AM BST
-  command = "python scripts/cache_warmer.py --prod"
-
-  # Alternative: If client is always in GMT (no DST):
-  # schedule = "25 9 * * *"  # 9:25 AM UTC = 9:25 AM GMT
-
-# Deployment regions
-[regions]
-  lhr = ["lhr"]  # London (primary)
-  # Can add more regions for redundancy:
-  # ams = ["ams"]  # Amsterdam (backup)
-
-# Auto-scaling (optional for future)
-# [scaling]
-#   min_count = 1
-#   max_count = 2
-
-# Persistent volumes (if needed for future caching)
-# [[mounts]]
-#   source = "casualhero_data"
-#   destination = "/data"
+  memory = "8gb"  # 8GB RAM for 5 years of data (~1.66M rows)
 
 # Deployment commands:
 #

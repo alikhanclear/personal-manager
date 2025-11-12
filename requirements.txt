@@ -10,7 +10,9 @@ duckdb>=0.10.0              # In-process SQL analytics database
 pyyaml>=6.0.1               # YAML config parsing (fiscal_overrides.yaml)
 
 # Web Framework
-streamlit>=1.31.0           # Web UI framework for dashboards
+dash==3.2.0                 # Plotly Dash - Production BI framework
+dash-bootstrap-components==2.0.4  # Bootstrap components for Dash
+gunicorn>=21.2.0            # WSGI server for production deployment
 
 # Visualization
 plotly>=5.18.0              # Interactive charts (Express + Graph Objects)
@@ -28,8 +30,3 @@ pytest-cov>=4.1.0           # Test coverage reports
 # Utilities
 python-dotenv>=1.0.0        # Environment variable management (.env files)
 requests>=2.31.0            # HTTP requests (for cache warmer)
-streamlit-aggrid==1.2.0.post1
-perspective-python==4.0.0
-matplotlib==3.10.7
-dash==3.2.0
-dash-bootstrap-components==2.0.4

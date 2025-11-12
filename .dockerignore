@@ -1,0 +1,70 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Documentation
+*.md
+docs/
+
+# Logs
+logs/
+*.log
+
+# Data and cache (don't ship to production)
+data/
+cache/
+*.csv
+*.parquet
+*.db
+
+# Environment files (use Fly.io secrets instead)
+.env
+.env.*
+
+# Archives and old code
+archive/
+scripts/test_*.py
+scripts/debug_*.py
+scripts/export_*.py
+scripts/fetch_*.py
+scripts/check_*.py
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Fly.io
+.fly/
+fly.toml.bak
