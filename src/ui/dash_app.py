@@ -757,114 +757,115 @@ def update_weekly_report(fiscal_year, fiscal_week):
                 # Green bars: #00B050 (positive variance), Red bars: #FF0000 (negative variance)
                 # Text color: Black for all values
                 # SCALED values: bars fill more of cell based on relative range in column
+                # OPTIMIZED: Using 25% increments instead of 10% for faster rendering (64 rules vs 160)
                 # Create gradient bars for positive values (green on right side)
                 [
                     {
                         'if': {
-                            'filter_query': f'{{Weekly_Sales_Var_Pct_Scaled}} >= {i} && {{Weekly_Sales_Var_Pct_Scaled}} < {i+10}',
+                            'filter_query': f'{{Weekly_Sales_Var_Pct_Scaled}} >= {i} && {{Weekly_Sales_Var_Pct_Scaled}} < {i+25}',
                             'column_id': 'Weekly_Sales_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+5)*0.5}%, white {50 + (i+5)*0.5}%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+12.5)*0.5}%, white {50 + (i+12.5)*0.5}%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 # Negative values (red on left side)
                 [
                     {
                         'if': {
-                            'filter_query': f'{{Weekly_Sales_Var_Pct_Scaled}} >= {-i-10} && {{Weekly_Sales_Var_Pct_Scaled}} < {-i}',
+                            'filter_query': f'{{Weekly_Sales_Var_Pct_Scaled}} >= {-i-25} && {{Weekly_Sales_Var_Pct_Scaled}} < {-i}',
                             'column_id': 'Weekly_Sales_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+5)*0.5}%, #FF0000 {50 - (i+5)*0.5}%, #FF0000 50%, white 50%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+12.5)*0.5}%, #FF0000 {50 - (i+12.5)*0.5}%, #FF0000 50%, white 50%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 # FourWeek_Avg variance (scaled)
                 [
                     {
                         'if': {
-                            'filter_query': f'{{FourWeek_Avg_Var_Pct_Scaled}} >= {i} && {{FourWeek_Avg_Var_Pct_Scaled}} < {i+10}',
+                            'filter_query': f'{{FourWeek_Avg_Var_Pct_Scaled}} >= {i} && {{FourWeek_Avg_Var_Pct_Scaled}} < {i+25}',
                             'column_id': 'FourWeek_Avg_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+5)*0.5}%, white {50 + (i+5)*0.5}%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+12.5)*0.5}%, white {50 + (i+12.5)*0.5}%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 [
                     {
                         'if': {
-                            'filter_query': f'{{FourWeek_Avg_Var_Pct_Scaled}} >= {-i-10} && {{FourWeek_Avg_Var_Pct_Scaled}} < {-i}',
+                            'filter_query': f'{{FourWeek_Avg_Var_Pct_Scaled}} >= {-i-25} && {{FourWeek_Avg_Var_Pct_Scaled}} < {-i}',
                             'column_id': 'FourWeek_Avg_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+5)*0.5}%, #FF0000 {50 - (i+5)*0.5}%, #FF0000 50%, white 50%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+12.5)*0.5}%, #FF0000 {50 - (i+12.5)*0.5}%, #FF0000 50%, white 50%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 # Volume variance (scaled)
                 [
                     {
                         'if': {
-                            'filter_query': f'{{Volume_Var_Pct_Scaled}} >= {i} && {{Volume_Var_Pct_Scaled}} < {i+10}',
+                            'filter_query': f'{{Volume_Var_Pct_Scaled}} >= {i} && {{Volume_Var_Pct_Scaled}} < {i+25}',
                             'column_id': 'Volume_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+5)*0.5}%, white {50 + (i+5)*0.5}%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+12.5)*0.5}%, white {50 + (i+12.5)*0.5}%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 [
                     {
                         'if': {
-                            'filter_query': f'{{Volume_Var_Pct_Scaled}} >= {-i-10} && {{Volume_Var_Pct_Scaled}} < {-i}',
+                            'filter_query': f'{{Volume_Var_Pct_Scaled}} >= {-i-25} && {{Volume_Var_Pct_Scaled}} < {-i}',
                             'column_id': 'Volume_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+5)*0.5}%, #FF0000 {50 - (i+5)*0.5}%, #FF0000 50%, white 50%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+12.5)*0.5}%, #FF0000 {50 - (i+12.5)*0.5}%, #FF0000 50%, white 50%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 # ATV variance (scaled)
                 [
                     {
                         'if': {
-                            'filter_query': f'{{ATV_Var_Pct_Scaled}} >= {i} && {{ATV_Var_Pct_Scaled}} < {i+10}',
+                            'filter_query': f'{{ATV_Var_Pct_Scaled}} >= {i} && {{ATV_Var_Pct_Scaled}} < {i+25}',
                             'column_id': 'ATV_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+5)*0.5}%, white {50 + (i+5)*0.5}%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white 50%, #00B050 50%, #00B050 {50 + (i+12.5)*0.5}%, white {50 + (i+12.5)*0.5}%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 [
                     {
                         'if': {
-                            'filter_query': f'{{ATV_Var_Pct_Scaled}} >= {-i-10} && {{ATV_Var_Pct_Scaled}} < {-i}',
+                            'filter_query': f'{{ATV_Var_Pct_Scaled}} >= {-i-25} && {{ATV_Var_Pct_Scaled}} < {-i}',
                             'column_id': 'ATV_Var_Pct_Display'
                         },
-                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+5)*0.5}%, #FF0000 {50 - (i+5)*0.5}%, #FF0000 50%, white 50%)',
+                        'background': f'linear-gradient(to top, white 0%, white 29.5%, transparent 29.5%, transparent 70.5%, white 70.5%, white 100%), linear-gradient(90deg, white 0%, white {50 - (i+12.5)*0.5}%, #FF0000 {50 - (i+12.5)*0.5}%, #FF0000 50%, white 50%)',
                         'color': '#000000',
                         'fontWeight': 'bold',
                         'textAlign': 'right'
                     }
-                    for i in range(0, 200, 10)
+                    for i in range(0, 200, 25)
                 ] +
                 # Override rules: Remove ALL bars when display value is blank OR variance is 0
                 # These come last so they override any bar styling above
