@@ -68,7 +68,7 @@ def load_transactions():
         print(f"  [Query] Starting database query...")
 
         db = get_db()
-        raw_df = query_all_transactions(db, years=5)
+        raw_df = query_all_transactions(db, years=2)  # Reduced to 2 years for 8GB RAM (MVP)
 
         query_end = datetime.now()
         query_duration = (query_end - query_start).total_seconds()
