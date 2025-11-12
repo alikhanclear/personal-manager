@@ -39,5 +39,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run with Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "src.ui.dash_app:server"]
+# Run with Gunicorn (single worker for MVP - data loads once at startup)
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "300", "--graceful-timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "src.ui.dash_app:server"]
