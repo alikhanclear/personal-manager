@@ -121,6 +121,15 @@ app = dash.Dash(
 
 server = app.server  # For deployment
 
+# Health check endpoint (for Fly.io and monitoring)
+@server.route('/health')
+def health_check():
+    """Health check endpoint - returns OK only after data is loaded."""
+    if 'transactions' in DATA_CACHE:
+        return {'status': 'healthy', 'rows': len(DATA_CACHE['transactions'])}, 200
+    else:
+        return {'status': 'loading'}, 503  # Service Unavailable until data loads
+
 
 # ============================================================================
 # Custom CSS Styles (CasualHero Theme)
