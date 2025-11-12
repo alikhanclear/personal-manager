@@ -68,7 +68,7 @@ def load_transactions():
         print(f"  [Query] Starting database query...")
 
         db = get_db()
-        raw_df = query_all_transactions(db, years=5)  # Batched loading handles 5 years in 8GB RAM
+        raw_df = query_all_transactions(db, years=2)  # 2 years for POC (4GB RAM)
 
         query_end = datetime.now()
         query_duration = (query_end - query_start).total_seconds()
