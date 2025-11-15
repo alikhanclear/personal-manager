@@ -19,7 +19,7 @@ class ClaudeCategorizationEngine:
         self,
         categories: List[Category],
         api_key: Optional[str] = None,
-        model: str = "claude-haiku-4-20250514",
+        model: str = "claude-3-haiku-20240307",
     ):
         """
         Initialize Claude categorization engine.
