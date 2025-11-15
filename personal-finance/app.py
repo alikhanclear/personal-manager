@@ -203,48 +203,45 @@ def create_layout():
             ]),
 
             # Review Tab
-            dbc.Tab(label="📋 Review", children=[
+            dbc.Tab(label="📋 Review & Correct", children=[
                 dbc.Row([
                     dbc.Col([
-                        html.H4("Transaction Review", className="mt-3 mb-3"),
+                        html.H4("AI Categorization Review", className="mt-3 mb-3"),
+                        html.P("Review AI suggestions, correct any mistakes, and create rules for future transactions.", className="text-muted"),
 
-                        # Filters
+                        # Controls
                         dbc.Row([
                             dbc.Col([
-                                dbc.Label("Filter by Category"),
+                                dbc.Label("Show:"),
                                 dcc.Dropdown(
-                                    id='filter-category',
-                                    options=[{'label': 'All Categories', 'value': 'all'}],
-                                    value='all',
-                                    clearable=False,
-                                ),
-                            ], width=4),
-                            dbc.Col([
-                                dbc.Label("Filter by Status"),
-                                dcc.Dropdown(
-                                    id='filter-status',
+                                    id='review-filter',
                                     options=[
-                                        {'label': 'All', 'value': 'all'},
-                                        {'label': 'Needs Review', 'value': 'unconfirmed'},
-                                        {'label': 'Confirmed', 'value': 'confirmed'},
-                                        {'label': 'Uncategorized', 'value': 'uncategorized'},
+                                        {'label': '⚠️ Needs Review (AI suggestions)', 'value': 'needs_review'},
+                                        {'label': '❓ Uncategorized Only', 'value': 'uncategorized'},
+                                        {'label': '✓ Confirmed', 'value': 'confirmed'},
+                                        {'label': '📋 All Transactions', 'value': 'all'},
                                     ],
-                                    value='unconfirmed',
+                                    value='needs_review',
                                     clearable=False,
                                 ),
-                            ], width=4),
+                            ], width=6),
                             dbc.Col([
-                                dbc.Label("Search"),
-                                dbc.Input(
-                                    id='search-text',
-                                    type='text',
-                                    placeholder='Search description...',
+                                dbc.Label("Items per page:"),
+                                dcc.Dropdown(
+                                    id='review-page-size',
+                                    options=[
+                                        {'label': '10', 'value': 10},
+                                        {'label': '25', 'value': 25},
+                                        {'label': '50', 'value': 50},
+                                    ],
+                                    value=10,
+                                    clearable=False,
                                 ),
-                            ], width=4),
-                        ], className="mb-3"),
+                            ], width=3),
+                        ], className="mb-4"),
 
-                        # Transaction table
-                        html.Div(id='transaction-table-container'),
+                        # Transaction review list
+                        html.Div(id='review-list-container'),
 
                     ], width=12),
                 ]),
@@ -396,106 +393,189 @@ def categorize_transactions(n_clicks):
 
 
 @callback(
-    Output('transaction-table-container', 'children'),
-    Input('filter-category', 'value'),
-    Input('filter-status', 'value'),
-    Input('search-text', 'value'),
+    Output('review-list-container', 'children'),
+    Input('review-filter', 'value'),
+    Input('review-page-size', 'value'),
 )
-def update_transaction_table(category_filter, status_filter, search_text):
-    """Update transaction table based on filters."""
-
+def update_review_list(filter_value, page_size):
+    """Update the review list of transactions."""
     # Get all transactions
     transactions = db.get_transactions()
 
     if len(transactions) == 0:
-        return dbc.Alert("No transactions found. Import a CSV file to get started.", color="info")
+        return dbc.Alert("No transactions found. Import a CSV file first.", color="info")
 
-    # Apply filters
-    filtered = transactions
+    # Apply filter
+    if filter_value == 'needs_review':
+        filtered = [t for t in transactions if t.category and not t.category_confirmed and t.category != "Uncategorized"]
+    elif filter_value == 'uncategorized':
+        filtered = [t for t in transactions if not t.category or t.category == "Uncategorized"]
+    elif filter_value == 'confirmed':
+        filtered = [t for t in transactions if t.category_confirmed]
+    else:  # all
+        filtered = transactions
 
-    if status_filter == 'unconfirmed':
-        filtered = [t for t in filtered if not t.category_confirmed]
-    elif status_filter == 'confirmed':
-        filtered = [t for t in filtered if t.category_confirmed]
-    elif status_filter == 'uncategorized':
-        filtered = [t for t in filtered if not t.category or t.category == "Uncategorized"]
+    if len(filtered) == 0:
+        return dbc.Alert(f"No transactions match filter: {filter_value}", color="info")
 
-    if category_filter and category_filter != 'all':
-        filtered = [t for t in filtered if t.category == category_filter]
+    # Limit to page size
+    display_transactions = filtered[:page_size]
 
-    if search_text:
-        search_lower = search_text.lower()
-        filtered = [t for t in filtered if search_lower in t.description.lower()]
+    # Get all categories for dropdown
+    categories = db.get_categories()
+    category_options = [{'label': f"{cat.icon} {cat.name}", 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
 
-    # Convert to DataFrame
-    data = []
-    for t in filtered:
-        data.append({
-            'Date': t.date.isoformat(),
-            'Description': t.description,
-            'Amount': f"£{t.amount:,.2f}",
-            'Category': t.category or "Uncategorized",
-            'Confidence': f"{(t.category_confidence or 0)*100:.0f}%" if t.category_confidence else "N/A",
-            'Confirmed': '✓' if t.category_confirmed else '✗',
-            'Account': t.account_name,
-        })
+    # Build cards for each transaction
+    cards = []
+    for txn in display_transactions:
+        # Confidence badge
+        if txn.category_confidence:
+            conf_pct = int(txn.category_confidence * 100)
+            if conf_pct >= 90:
+                conf_color = "success"
+            elif conf_pct >= 70:
+                conf_color = "warning"
+            else:
+                conf_color = "danger"
+            confidence_badge = dbc.Badge(f"{conf_pct}% confidence", color=conf_color, className="ms-2")
+        else:
+            confidence_badge = None
 
-    if len(data) == 0:
-        return dbc.Alert("No transactions match the current filters.", color="info")
+        # Amount color
+        amount_color = "danger" if txn.amount < 0 else "success"
 
-    df = pd.DataFrame(data)
+        card = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    # Left: Transaction details
+                    dbc.Col([
+                        html.H6(txn.description[:60], className="mb-2"),
+                        html.Small([
+                            html.Span(f"{txn.date.strftime('%d %b %Y')}", className="text-muted me-3"),
+                            html.Span(f"£{txn.amount:,.2f}", className=f"text-{amount_color} fw-bold me-3"),
+                            html.Span(f"{txn.account_name}", className="text-muted"),
+                        ]),
+                    ], width=12, lg=6),
 
-    # Create table
-    table = dash_table.DataTable(
-        data=df.to_dict('records'),
-        columns=[{'name': col, 'id': col} for col in df.columns],
-        style_table={'overflowX': 'auto'},
-        style_cell={
-            'textAlign': 'left',
-            'padding': '10px',
-            'fontFamily': 'system-ui',
-        },
-        style_header={
-            'backgroundColor': '#f8f9fa',
-            'fontWeight': 'bold',
-            'borderBottom': '2px solid #dee2e6',
-        },
-        style_data_conditional=[
-            {
-                'if': {'column_id': 'Amount', 'filter_query': '{Amount} contains "-"'},
-                'color': '#dc3545',
-            },
-            {
-                'if': {'column_id': 'Confirmed', 'filter_query': '{Confirmed} eq "✓"'},
-                'color': '#28a745',
-            },
-        ],
-        page_size=20,
-        sort_action='native',
-        filter_action='native',
-    )
+                    # Right: Category selection
+                    dbc.Col([
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Category:", className="small text-muted mb-1"),
+                                dcc.Dropdown(
+                                    id={'type': 'category-dropdown', 'index': txn.id},
+                                    options=category_options,
+                                    value=txn.category,
+                                    clearable=False,
+                                    className="mb-2",
+                                ),
+                                html.Div([
+                                    html.Small(f"AI suggested: {txn.category}", className="text-muted") if txn.category else None,
+                                    confidence_badge,
+                                ]) if not txn.category_confirmed else html.Small("✓ Confirmed", className="text-success"),
+                            ], width=12),
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Button(
+                                    "✓ Confirm",
+                                    id={'type': 'confirm-btn', 'index': txn.id},
+                                    color="primary",
+                                    size="sm",
+                                    className="me-2",
+                                ),
+                                dbc.Button(
+                                    "✓ Confirm & Create Rule",
+                                    id={'type': 'confirm-rule-btn', 'index': txn.id},
+                                    color="success",
+                                    size="sm",
+                                ),
+                            ], width=12),
+                        ], className="mt-2"),
+                    ], width=12, lg=6),
+                ]),
+            ])
+        ], className="mb-3")
 
-    return html.Div([
-        html.P(f"Showing {len(filtered):,} of {len(transactions):,} transactions"),
-        table,
+        cards.append(card)
+
+    # Summary
+    summary = html.Div([
+        html.P(f"Showing {len(display_transactions)} of {len(filtered)} transactions", className="text-muted mb-3"),
     ])
+
+    return [summary] + cards
 
 
 @callback(
-    Output('filter-category', 'options'),
-    Input('filter-category', 'value'),  # Dummy input to trigger
+    Output({'type': 'confirm-btn', 'index': ALL}, 'disabled'),
+    Input({'type': 'confirm-btn', 'index': ALL}, 'n_clicks'),
+    State({'type': 'category-dropdown', 'index': ALL}, 'value'),
+    State({'type': 'confirm-btn', 'index': ALL}, 'id'),
+    prevent_initial_call=True,
 )
-def update_category_dropdown(_):
-    """Update category dropdown with available categories."""
-    categories = db.get_categories()
-    options = [{'label': 'All Categories', 'value': 'all'}]
+def confirm_category(n_clicks_list, category_list, id_list):
+    """Confirm category for a transaction."""
+    if not any(n_clicks_list):
+        raise PreventUpdate
 
-    # Get top-level categories only
-    top_level = [c for c in categories if c.parent_id is None]
-    for cat in sorted(top_level, key=lambda x: x.name):
-        options.append({'label': f"{cat.icon} {cat.name}", 'value': cat.name})
+    # Find which button was clicked
+    clicked_idx = next((i for i, n in enumerate(n_clicks_list) if n), None)
+    if clicked_idx is None:
+        raise PreventUpdate
 
-    return options
+    txn_id = id_list[clicked_idx]['index']
+    category = category_list[clicked_idx]
+
+    # Update transaction
+    db.update_transaction_category(txn_id, category, confirmed=True)
+    print(f"[Review] Confirmed: {txn_id} → {category}")
+
+    # Return disabled state (no changes needed, page will refresh)
+    return [False] * len(n_clicks_list)
+
+
+@callback(
+    Output({'type': 'confirm-rule-btn', 'index': ALL}, 'disabled'),
+    Input({'type': 'confirm-rule-btn', 'index': ALL}, 'n_clicks'),
+    State({'type': 'category-dropdown', 'index': ALL}, 'value'),
+    State({'type': 'confirm-rule-btn', 'index': ALL}, 'id'),
+    prevent_initial_call=True,
+)
+def confirm_and_create_rule(n_clicks_list, category_list, id_list):
+    """Confirm category and create a rule for future transactions."""
+    if not any(n_clicks_list):
+        raise PreventUpdate
+
+    # Find which button was clicked
+    clicked_idx = next((i for i, n in enumerate(n_clicks_list) if n), None)
+    if clicked_idx is None:
+        raise PreventUpdate
+
+    txn_id = id_list[clicked_idx]['index']
+    category = category_list[clicked_idx]
+
+    # Get transaction to extract pattern
+    txn = db.get_transaction(txn_id)
+    if not txn:
+        raise PreventUpdate
+
+    # Update transaction
+    db.update_transaction_category(txn_id, category, confirmed=True)
+
+    # Create rule from transaction description
+    categorizer = get_categorizer()
+    suggested_rule = categorizer.suggest_rule_from_transaction(txn, category)
+
+    # Add rule to database
+    try:
+        db.insert_rule(suggested_rule)
+        print(f"[Review] Confirmed + Rule created: '{suggested_rule.pattern}' → {category}")
+    except Exception as e:
+        print(f"[Review] Failed to create rule: {e}")
+
+    # Return disabled state (no changes needed, page will refresh)
+    return [False] * len(n_clicks_list)
 
 
 @callback(
