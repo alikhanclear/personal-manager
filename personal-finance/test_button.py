@@ -5,7 +5,8 @@ This creates a minimal Dash app with just a button and text output
 to test if callbacks are working properly.
 """
 import dash
-from dash import html, dbc, Input, Output, callback
+from dash import html, Input, Output, callback
+import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
