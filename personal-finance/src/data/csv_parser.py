@@ -14,8 +14,13 @@ from .models import Transaction
 class NatWestParser:
     """Parser for NatWest bank CSV/TSV files."""
 
-    # NatWest date format: "10-Jan-25"
-    DATE_FORMAT = "%d-%b-%y"
+    # NatWest date formats (try in order)
+    DATE_FORMATS = [
+        "%d %b %Y",    # "14 Nov 2025"
+        "%d-%b-%y",    # "10-Jan-25"
+        "%d/%m/%Y",    # "14/11/2025"
+        "%Y-%m-%d",    # "2025-11-14"
+    ]
 
     # Expected columns in NatWest export
     EXPECTED_COLUMNS = [
@@ -106,9 +111,22 @@ class NatWestParser:
     def _parse_row(cls, row: dict) -> Transaction:
         """Parse a single CSV row into Transaction object."""
 
-        # Parse date: "10-Jan-25" -> date object
+        # Parse date - try multiple formats
         date_str = row["Date"]
-        parsed_date = datetime.strptime(date_str, cls.DATE_FORMAT).date()
+        parsed_date = None
+
+        for date_format in cls.DATE_FORMATS:
+            try:
+                parsed_date = datetime.strptime(date_str, date_format).date()
+                break  # Success!
+            except ValueError:
+                continue  # Try next format
+
+        if parsed_date is None:
+            raise ValueError(
+                f"Could not parse date '{date_str}'. "
+                f"Tried formats: {cls.DATE_FORMATS}"
+            )
 
         # Parse amount (Value column)
         # Negative = debit (money out), Positive = credit (money in)
