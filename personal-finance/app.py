@@ -100,6 +100,9 @@ def initialize_categories_and_rules():
 
 def get_categorizer():
     """Get or create categorizer instance."""
+    # Ensure categories and rules are initialized
+    initialize_categories_and_rules()
+
     if APP_STATE["categorizer"] is None:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         APP_STATE["categorizer"] = HybridCategorizer(
@@ -321,16 +324,31 @@ def categorize_transactions(n_clicks):
         raise PreventUpdate
 
     try:
+        # Get all transactions
+        all_transactions = db.get_transactions()
+        print(f"[Categorization] Total transactions in DB: {len(all_transactions)}")
+
         # Get uncategorized transactions
-        transactions = db.get_transactions()
-        uncategorized = [t for t in transactions if not t.category or t.category == "Uncategorized"]
+        uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
+        print(f"[Categorization] Uncategorized: {len(uncategorized)}")
 
         if len(uncategorized) == 0:
-            return dbc.Alert("No uncategorized transactions found.", color="info")
+            if len(all_transactions) == 0:
+                return dbc.Alert("No transactions found in database. Please import a CSV file first.", color="warning")
+            else:
+                return dbc.Alert("All transactions are already categorized!", color="info")
+
+        # Get categorizer (this also initializes categories and rules)
+        categorizer = get_categorizer()
+
+        # Check rules and categories
+        stats = categorizer.get_statistics()
+        print(f"[Categorization] Rules: {stats['total_rules']}, Categories: {stats['total_categories']}")
 
         # Categorize
-        categorizer = get_categorizer()
+        print(f"[Categorization] Starting categorization of {len(uncategorized)} transactions...")
         results = categorizer.categorize_batch(uncategorized, use_ai_fallback=True)
+        print(f"[Categorization] Results: {results['rule_matched']} rules, {results['ai_categorized']} AI, {results['uncategorized']} uncategorized")
 
         # Save results
         categorizer.save_transaction_categories(results)
