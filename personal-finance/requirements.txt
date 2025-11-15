@@ -19,9 +19,10 @@ dash>=2.14.0
 dash-bootstrap-components>=1.5.0
 plotly>=5.17.0
 
-# AI/ML (optional, for categorization)
-openai>=1.0.0  # For GPT-4 categorization
-# transformers>=4.35.0  # For local LLM (optional)
+# AI/ML (for categorization)
+anthropic>=0.39.0  # Claude Haiku/Sonnet/Opus API (RECOMMENDED)
+# openai>=1.0.0  # Alternative: GPT-4 categorization (not recommended)
+# transformers>=4.35.0  # Alternative: Local LLM (optional)
 # sentence-transformers>=2.2.0  # For embeddings (optional)
 
 # Utilities

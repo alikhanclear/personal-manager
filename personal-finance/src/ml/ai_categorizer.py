@@ -1,0 +1,229 @@
+"""
+Claude Haiku AI categorizer for transactions.
+
+Uses prompt caching to reduce costs by 90% for repeated category lookups.
+"""
+import json
+import os
+from typing import List, Optional, Tuple
+
+from anthropic import Anthropic
+
+from ..data.models import Category, Transaction
+
+
+class ClaudeCategorizationEngine:
+    """AI-powered transaction categorization using Claude Haiku."""
+
+    def __init__(
+        self,
+        categories: List[Category],
+        api_key: Optional[str] = None,
+        model: str = "claude-haiku-4-20250514",
+    ):
+        """
+        Initialize Claude categorization engine.
+
+        Args:
+            categories: List of available categories
+            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            model: Claude model to use (haiku recommended for speed/cost)
+        """
+        self.categories = categories
+        self.model = model
+        self.client = Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
+
+        # Build category context for prompt caching
+        self._category_context = self._build_category_context()
+
+    def _build_category_context(self) -> str:
+        """
+        Build category context for prompt caching.
+
+        This is the expensive part that we cache to save 90% on costs.
+        """
+        lines = ["# Available Categories\n"]
+
+        # Group by parent
+        top_level = [c for c in self.categories if c.parent_id is None]
+        children_map = {}
+        for cat in self.categories:
+            if cat.parent_id:
+                if cat.parent_id not in children_map:
+                    children_map[cat.parent_id] = []
+                children_map[cat.parent_id].append(cat)
+
+        # Format hierarchically
+        for parent in top_level:
+            lines.append(f"\n## {parent.icon} {parent.name}")
+            if parent.id in children_map:
+                for child in children_map[parent.id]:
+                    lines.append(f"  - {child.icon} {child.name} (ID: {child.name})")
+            else:
+                lines.append(f"  (ID: {parent.name})")
+
+        return "\n".join(lines)
+
+    def categorize_transaction(
+        self, transaction: Transaction
+    ) -> Tuple[str, float, str]:
+        """
+        Categorize a single transaction using Claude Haiku.
+
+        Args:
+            transaction: Transaction to categorize
+
+        Returns:
+            Tuple of (category_name, confidence, reasoning)
+        """
+        # Build prompt
+        prompt = f"""You are a financial transaction categorizer.
+
+Given this transaction:
+- Description: {transaction.description}
+- Amount: £{transaction.amount}
+- Date: {transaction.date}
+- Type: {transaction.transaction_type}
+
+Categorize it into ONE of the available categories below.
+
+Return ONLY a JSON object with this exact structure:
+{{
+  "category": "Category Name",
+  "confidence": 0.95,
+  "reasoning": "Brief explanation"
+}}
+
+Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess).
+"""
+
+        try:
+            # Use prompt caching for category list (90% cost reduction!)
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=300,
+                system=[
+                    {
+                        "type": "text",
+                        "text": "You are a UK personal finance expert helping categorize bank transactions.",
+                    },
+                    {
+                        "type": "text",
+                        "text": self._category_context,
+                        "cache_control": {"type": "ephemeral"},  # CACHE THIS!
+                    },
+                ],
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            # Parse response
+            response_text = response.content[0].text.strip()
+
+            # Extract JSON (handle markdown code blocks)
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+
+            result = json.loads(response_text)
+
+            category = result.get("category", "Uncategorized")
+            confidence = float(result.get("confidence", 0.5))
+            reasoning = result.get("reasoning", "No reasoning provided")
+
+            return category, confidence, reasoning
+
+        except Exception as e:
+            # Fallback on error
+            print(f"AI categorization error: {e}")
+            return "Uncategorized", 0.0, f"Error: {str(e)}"
+
+    def categorize_batch(
+        self, transactions: List[Transaction], batch_size: int = 10
+    ) -> List[Tuple[Transaction, str, float, str]]:
+        """
+        Categorize multiple transactions.
+
+        Args:
+            transactions: List of transactions to categorize
+            batch_size: Number of transactions to process in parallel (not implemented yet)
+
+        Returns:
+            List of (transaction, category, confidence, reasoning) tuples
+        """
+        results = []
+
+        for i, txn in enumerate(transactions):
+            print(f"AI categorizing {i+1}/{len(transactions)}: {txn.description[:40]}...")
+            category, confidence, reasoning = self.categorize_transaction(txn)
+            results.append((txn, category, confidence, reasoning))
+
+        return results
+
+    def estimate_cost(self, num_transactions: int) -> dict:
+        """
+        Estimate cost for categorizing transactions.
+
+        Args:
+            num_transactions: Number of transactions to categorize
+
+        Returns:
+            Dictionary with cost breakdown
+        """
+        # Haiku pricing (as of 2025)
+        INPUT_COST_CACHED = 0.03 / 1_000_000  # $0.03 per 1M cached tokens
+        INPUT_COST_UNCACHED = 0.25 / 1_000_000  # $0.25 per 1M uncached tokens
+        OUTPUT_COST = 1.25 / 1_000_000  # $1.25 per 1M output tokens
+
+        # Estimates
+        category_context_tokens = len(self._category_context) // 4  # ~4 chars/token
+        prompt_tokens_per_txn = 100  # Transaction description + prompt
+        output_tokens_per_txn = 50  # JSON response
+
+        # First request: No cache
+        first_request_cost = (
+            (category_context_tokens + prompt_tokens_per_txn) * INPUT_COST_UNCACHED
+            + output_tokens_per_txn * OUTPUT_COST
+        )
+
+        # Subsequent requests: Cached category context
+        subsequent_cost = (
+            category_context_tokens * INPUT_COST_CACHED
+            + prompt_tokens_per_txn * INPUT_COST_UNCACHED
+            + output_tokens_per_txn * OUTPUT_COST
+        )
+
+        total_cost = first_request_cost + (num_transactions - 1) * subsequent_cost
+
+        return {
+            "num_transactions": num_transactions,
+            "estimated_total_cost_usd": round(total_cost, 4),
+            "cost_per_transaction_usd": round(total_cost / num_transactions, 6),
+            "category_context_tokens": category_context_tokens,
+            "prompt_caching_enabled": True,
+            "savings_vs_no_cache": round(
+                (num_transactions * (category_context_tokens * INPUT_COST_UNCACHED))
+                - (first_request_cost + (num_transactions - 1) * category_context_tokens * INPUT_COST_CACHED),
+                4,
+            ),
+        }
+
+
+def quick_categorize(
+    transaction: Transaction,
+    categories: List[Category],
+    api_key: Optional[str] = None,
+) -> Tuple[str, float, str]:
+    """
+    Quick helper to categorize a single transaction.
+
+    Args:
+        transaction: Transaction to categorize
+        categories: List of available categories
+        api_key: Anthropic API key
+
+    Returns:
+        Tuple of (category, confidence, reasoning)
+    """
+    engine = ClaudeCategorizationEngine(categories, api_key)
+    return engine.categorize_transaction(transaction)
