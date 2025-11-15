@@ -22,9 +22,20 @@ pip install -r requirements.txt
 
 If you want AI categorization for transactions that don't match rules:
 
+**Option A: Using .env file (RECOMMENDED)**
 ```bash
-# Get API key from: https://console.anthropic.com/
-export ANTHROPIC_API_KEY='your-api-key-here'
+# Copy the example file
+cp .env.example .env
+
+# Edit .env and add your API key
+# ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+Get your API key from: **https://console.anthropic.com/**
+
+**Option B: Environment variable (temporary)**
+```bash
+export ANTHROPIC_API_KEY='sk-ant-your-key-here'
 ```
 
 **Without API key:** Rules-only mode (FREE, instant for known merchants)
