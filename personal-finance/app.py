@@ -272,10 +272,13 @@ app.layout = create_layout
 )
 def handle_csv_upload(contents, filename):
     """Handle CSV file upload."""
+    print(f"[DEBUG] Upload callback triggered. filename={filename}")
+
     if contents is None:
         raise PreventUpdate
 
     try:
+        print(f"[DEBUG] Processing upload...")
         # Parse uploaded file
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
@@ -320,10 +323,14 @@ def handle_csv_upload(contents, filename):
 )
 def categorize_transactions(n_clicks):
     """Categorize imported transactions."""
+    print(f"[DEBUG] Categorize button clicked! n_clicks={n_clicks}")
+
     if n_clicks is None:
+        print("[DEBUG] n_clicks is None, preventing update")
         raise PreventUpdate
 
     try:
+        print("[DEBUG] Starting categorization...")
         # Get all transactions
         all_transactions = db.get_transactions()
         print(f"[Categorization] Total transactions in DB: {len(all_transactions)}")
