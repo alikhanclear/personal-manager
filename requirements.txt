@@ -22,6 +22,7 @@ plotly>=5.18.0              # Interactive charts (Express + Graph Objects)
 # Database
 sqlalchemy>=2.0.0           # Database ORM and connection management
 psycopg2-binary>=2.9.9      # PostgreSQL adapter for SQLAlchemy
+pydantic>=2.0.0             # Data validation and settings management
 
 # Development Tools
 black>=24.0.0               # Code formatter

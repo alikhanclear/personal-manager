@@ -1,0 +1,28 @@
+# Personal Finance Manager - Python Dependencies
+
+# Data processing
+polars>=0.19.0
+pandas>=2.0.0  # Optional, for compatibility
+
+# Database
+# SQLite is built into Python, no separate package needed
+
+# Data validation
+pydantic>=2.0.0
+
+# Web framework (for future API)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Dashboard UI
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+plotly>=5.17.0
+
+# AI/ML (optional, for categorization)
+openai>=1.0.0  # For GPT-4 categorization
+# transformers>=4.35.0  # For local LLM (optional)
+# sentence-transformers>=2.2.0  # For embeddings (optional)
+
+# Utilities
+python-dotenv>=1.0.0  # Environment variables
