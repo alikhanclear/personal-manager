@@ -47,16 +47,33 @@ class NatWestParser:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        # Try reading as TSV (tab-separated)
-        try:
-            df = pl.read_csv(
-                file_path,
-                separator="\t",
-                has_header=True,
-                infer_schema_length=1000,
+        # Try reading with auto-detected separator (comma or tab)
+        df = None
+        last_error = None
+
+        # Try comma-separated first (more common)
+        for separator in [",", "\t"]:
+            try:
+                df = pl.read_csv(
+                    file_path,
+                    separator=separator,
+                    has_header=True,
+                    infer_schema_length=1000,
+                )
+                # Check if we got the expected columns
+                if set(cls.EXPECTED_COLUMNS).issubset(set(df.columns)):
+                    break  # Success!
+                else:
+                    df = None  # Wrong separator, try next
+            except Exception as e:
+                last_error = e
+                continue
+
+        if df is None:
+            raise ValueError(
+                f"Failed to parse CSV/TSV file. Tried both comma and tab separators. "
+                f"Last error: {last_error}"
             )
-        except Exception as e:
-            raise ValueError(f"Failed to parse CSV/TSV file: {e}")
 
         # Validate columns
         cls._validate_columns(df.columns)

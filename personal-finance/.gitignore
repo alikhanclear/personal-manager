@@ -7,9 +7,9 @@
 *.db-wal
 *.db-shm
 
-# Data directory
-data/
-uploads/
+# Data directory (runtime data, not source code)
+/data/
+/uploads/
 test_data/*.db
 
 # Python
