@@ -148,9 +148,10 @@ def create_layout():
         dbc.Tabs([
             # Import Tab
             dbc.Tab(label="📥 Import", children=[
+                # Step 1: Upload CSV
                 dbc.Row([
                     dbc.Col([
-                        html.H4("Upload CSV File", className="mt-3 mb-3"),
+                        html.H4("Step 1: Upload CSV File", className="mt-3 mb-3"),
 
                         dcc.Upload(
                             id='upload-csv',
@@ -175,15 +176,25 @@ def create_layout():
 
                         html.Div(id='upload-status', className="mt-3"),
 
-                        html.Div([
-                            dbc.Button(
-                                "Categorize Imported Transactions",
-                                id="btn-categorize",
-                                color="primary",
-                                className="mt-3",
-                                disabled=True,
-                            ),
-                        ]),
+                    ], width=12),
+                ]),
+
+                html.Hr(className="my-4"),
+
+                # Step 2: Categorize
+                dbc.Row([
+                    dbc.Col([
+                        html.H4("Step 2: Categorize Transactions", className="mb-3"),
+                        html.P("After uploading, click below to categorize your transactions using rules and AI.", className="text-muted"),
+
+                        dbc.Button(
+                            "🔄 Categorize Imported Transactions",
+                            id="btn-categorize",
+                            color="success",
+                            size="lg",
+                            className="mt-2 mb-3",
+                            disabled=True,
+                        ),
 
                         html.Div(id='categorization-status', className="mt-3"),
 
