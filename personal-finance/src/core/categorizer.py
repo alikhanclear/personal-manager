@@ -3,6 +3,7 @@ Hybrid transaction categorization system.
 
 Combines rule-based matching (free, instant) with AI fallback (pennies, smart).
 """
+import time
 from typing import List, Optional, Tuple
 
 from ..data.database import FinanceDatabase
@@ -136,7 +137,16 @@ class HybridCategorizer:
             "results": [],
         }
 
-        for txn in transactions:
+        # Rate limiting: 45 requests/minute (buffer for 50/min limit)
+        # = 1.33 seconds between requests
+        AI_DELAY = 1.4  # seconds between AI requests
+
+        for i, txn in enumerate(transactions, 1):
+            # Show progress every 50 transactions
+            if i % 50 == 0 or i == 1:
+                print(f"Processing {i}/{len(transactions)} transactions... "
+                      f"(Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']})")
+
             updated_txn, method, metadata = self.categorize_transaction(
                 txn, use_ai_fallback=use_ai_fallback
             )
@@ -146,6 +156,9 @@ class HybridCategorizer:
             elif method == "ai":
                 stats["ai_categorized"] += 1
                 stats["total_cost_usd"] += metadata.get("cost_usd", 0.0)
+                # Rate limit AI requests to avoid 429 errors
+                if use_ai_fallback and i < len(transactions):
+                    time.sleep(AI_DELAY)
             elif method == "already_confirmed":
                 stats["already_confirmed"] += 1
             else:
