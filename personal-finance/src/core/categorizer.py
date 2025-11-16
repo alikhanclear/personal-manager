@@ -10,6 +10,7 @@ from ..data.database import FinanceDatabase
 from ..data.models import Category, Rule, Transaction
 from ..ml.ai_categorizer import ClaudeCategorizationEngine
 from .rule_engine import RuleEngine
+from .progress_tracker import ProgressTracker
 
 
 class HybridCategorizer:
@@ -115,7 +116,8 @@ class HybridCategorizer:
         return transaction, "none", {}
 
     def categorize_batch(
-        self, transactions: List[Transaction], use_ai_fallback: bool = True
+        self, transactions: List[Transaction], use_ai_fallback: bool = True,
+        track_progress: bool = False
     ) -> dict:
         """
         Categorize a batch of transactions.
@@ -123,6 +125,7 @@ class HybridCategorizer:
         Args:
             transactions: List of transactions to categorize
             use_ai_fallback: Whether to use AI for unmatched transactions
+            track_progress: Whether to track progress to file (for UI)
 
         Returns:
             Dictionary with categorization statistics
@@ -137,6 +140,11 @@ class HybridCategorizer:
             "results": [],
         }
 
+        # Initialize progress tracker
+        tracker = ProgressTracker() if track_progress else None
+        if tracker:
+            tracker.start(len(transactions))
+
         # Rate limiting: 45 requests/minute (buffer for 50/min limit)
         # = 1.33 seconds between requests
         AI_DELAY = 1.4  # seconds between AI requests
@@ -149,6 +157,7 @@ class HybridCategorizer:
             if i % 50 == 0 or i == 1:
                 pct = (i / len(transactions)) * 100
                 elapsed = time.time() - start_time
+                eta_mins = 0.0
                 if i > 1:
                     rate = i / elapsed  # transactions per second
                     remaining = (len(transactions) - i) / rate
@@ -159,6 +168,16 @@ class HybridCategorizer:
                 else:
                     print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
                           f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']}")
+
+                # Update tracker
+                if tracker:
+                    tracker.update(
+                        processed=i,
+                        rule_matched=stats['rule_matched'],
+                        ai_categorized=stats['ai_categorized'],
+                        uncategorized=stats['uncategorized'],
+                        eta_minutes=eta_mins
+                    )
 
             updated_txn, method, metadata = self.categorize_transaction(
                 txn, use_ai_fallback=use_ai_fallback
@@ -183,6 +202,17 @@ class HybridCategorizer:
                     "method": method,
                     "metadata": metadata,
                 }
+            )
+
+        # Mark as complete
+        if tracker:
+            elapsed = time.time() - start_time
+            tracker.complete(
+                rule_matched=stats['rule_matched'],
+                ai_categorized=stats['ai_categorized'],
+                uncategorized=stats['uncategorized'],
+                cost_usd=stats['total_cost_usd'],
+                elapsed_minutes=elapsed / 60
             )
 
         return stats

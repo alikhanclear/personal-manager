@@ -191,37 +191,28 @@ def create_layout():
                 # Step 3: Apply AI
                 dbc.Card([
                     dbc.CardBody([
-                        html.H5("Step 3: Apply AI (Slow - Use Terminal)", className="mb-3"),
-                        html.P([
-                            "⚠️ AI categorization is slow (~51 mins for 2,700 txns). ",
-                            html.Strong("Run in terminal instead of browser:"),
-                        ], className="text-muted small"),
+                        html.H5("Step 3: Apply AI", className="mb-3"),
+                        html.P("Runs in background - you can close browser and come back!",
+                               className="text-muted small"),
 
-                        dbc.Alert([
-                            html.Strong("Recommended: Run in terminal"),
-                            html.Hr(),
-                            html.Code("python categorize_all.py", className="d-block mb-2"),
-                            html.Ul([
-                                html.Li("Shows progress every 50 transactions"),
-                                html.Li("Keeps running if you close browser"),
-                                html.Li("Results saved to database in real-time"),
-                                html.Li("Refresh browser to see updates"),
-                            ], className="mb-0 small"),
-                        ], color="info", className="mb-3"),
+                        dbc.Button(
+                            "🤖 Start AI Categorization",
+                            id="btn-start-ai-background",
+                            color="primary",
+                            size="lg",
+                            className="mb-3",
+                        ),
 
-                        html.Details([
-                            html.Summary("Or click here to run via browser (not recommended for >500 txns)"),
-                            html.Div([
-                                dbc.Button(
-                                    "🤖 Apply AI (Browser)",
-                                    id="btn-apply-ai",
-                                    color="warning",
-                                    size="lg",
-                                    className="mt-2",
-                                ),
-                                html.Div(id='ai-status', className="mt-3"),
-                            ]),
-                        ]),
+                        # Progress polling interval
+                        dcc.Interval(
+                            id='ai-progress-interval',
+                            interval=3*1000,  # Poll every 3 seconds
+                            n_intervals=0,
+                            disabled=True
+                        ),
+
+                        # Progress display
+                        html.Div(id='ai-progress-display', className="mt-3"),
                     ])
                 ], className="mb-3"),
 
@@ -440,69 +431,102 @@ def apply_rules(n_clicks):
 
 
 @callback(
-    Output('ai-status', 'children'),
-    Input('btn-apply-ai', 'n_clicks'),
+    Output('ai-progress-interval', 'disabled'),
+    Input('btn-start-ai-background', 'n_clicks'),
     prevent_initial_call=True,
 )
-def apply_ai(n_clicks):
-    """Apply AI categorization to remaining uncategorized transactions."""
+def start_ai_background(n_clicks):
+    """Start AI categorization in background process."""
     if n_clicks is None:
         raise PreventUpdate
 
-    try:
-        # Get uncategorized transactions
-        all_transactions = db.get_transactions()
-        uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
+    import subprocess
+    import sys
 
-        if len(uncategorized) == 0:
-            return dbc.Alert("All transactions are already categorized!", color="info")
+    # Launch background script
+    script_path = Path(__file__).parent / "run_ai_categorization.py"
+    subprocess.Popen([sys.executable, str(script_path)],
+                     stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL,
+                     start_new_session=True)
 
-        # Get categorizer
-        categorizer = get_categorizer()
+    # Enable polling interval
+    return False
 
-        # Check if AI is enabled
-        if not categorizer.ai_engine:
-            return dbc.Alert("AI is not enabled. Please set ANTHROPIC_API_KEY in .env file.", color="warning")
 
-        # Estimate time
-        estimated_minutes = (len(uncategorized) * 1.4) / 60
+@callback(
+    Output('ai-progress-display', 'children'),
+    Input('ai-progress-interval', 'n_intervals'),
+)
+def update_ai_progress(n_intervals):
+    """Poll and display AI categorization progress."""
+    from src.core.progress_tracker import ProgressTracker
 
-        # Show progress alert
-        progress_alert = dbc.Alert([
-            html.H5("🤖 AI Categorization Started", className="alert-heading"),
-            html.Hr(),
-            html.P([
-                f"Processing {len(uncategorized)} transactions...",
-                html.Br(),
-                f"⏱️ Estimated time: {estimated_minutes:.1f} minutes",
-                html.Br(),
-                html.Small("(Rate-limited to 45 requests/minute)", className="text-muted"),
-            ]),
-            dbc.Spinner(size="sm", color="primary"),
-        ], color="info")
+    tracker = ProgressTracker()
+    progress = tracker.get_progress()
 
-        # Categorize with AI
-        results = categorizer.categorize_batch(uncategorized, use_ai_fallback=True)
+    if not progress:
+        return None
 
-        # Save results
-        categorizer.save_transaction_categories(results)
+    status = progress.get('status', 'unknown')
+
+    if status == 'running':
+        # Show progress bar
+        percent = progress.get('percent', 0)
+        processed = progress.get('processed', 0)
+        total = progress.get('total', 0)
+        rule_matched = progress.get('rule_matched', 0)
+        ai_categorized = progress.get('ai_categorized', 0)
+        eta_minutes = progress.get('eta_minutes', 0)
 
         return dbc.Alert([
-            html.H5("✓ AI Categorization Complete", className="alert-heading"),
+            html.H5("🤖 AI Categorization Running...", className="alert-heading"),
+            html.Hr(),
+            dbc.Progress(value=percent, label=f"{percent:.1f}%", className="mb-3"),
+            html.P([
+                f"📊 Progress: {processed:,} / {total:,} transactions",
+                html.Br(),
+                f"📋 Rules matched: {rule_matched:,}",
+                html.Br(),
+                f"🤖 AI categorized: {ai_categorized:,}",
+                html.Br(),
+                f"⏱️ ETA: {eta_minutes:.1f} minutes",
+            ], className="mb-0"),
+            html.P("✓ Safe to close browser - process continues in background",
+                   className="mt-3 mb-0 small text-muted"),
+        ], color="info")
+
+    elif status == 'complete':
+        # Show completion
+        rule_matched = progress.get('rule_matched', 0)
+        ai_categorized = progress.get('ai_categorized', 0)
+        cost_usd = progress.get('cost_usd', 0.0)
+        elapsed_minutes = progress.get('elapsed_minutes', 0)
+
+        return dbc.Alert([
+            html.H5("✓ AI Categorization Complete!", className="alert-heading"),
             html.Hr(),
             html.P([
-                f"🤖 {results['ai_categorized']} categorized by AI",
+                f"⏱️ Completed in {elapsed_minutes:.1f} minutes",
                 html.Br(),
-                f"💰 Cost: ${results['total_cost_usd']:.4f}",
+                f"📋 {rule_matched:,} matched by rules (FREE)",
                 html.Br(),
-                f"❓ {results['uncategorized']} still uncategorized",
+                f"🤖 {ai_categorized:,} categorized by AI",
+                html.Br(),
+                f"💰 Cost: ${cost_usd:.4f}",
             ]),
             html.P("👉 Go to 'Review & Correct' tab to review AI suggestions",
                    className="mb-0 small text-muted"),
         ], color="success")
 
-    except Exception as e:
-        return dbc.Alert(f"Error: {str(e)}", color="danger")
+    elif status == 'error':
+        error = progress.get('error', 'Unknown error')
+        return dbc.Alert([
+            html.H5("❌ Error", className="alert-heading"),
+            html.P(str(error)),
+        ], color="danger")
+
+    return None
 
 
 @callback(
