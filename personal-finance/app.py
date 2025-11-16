@@ -625,71 +625,93 @@ def update_ai_progress(n_intervals):
 )
 def display_all_rules(n_intervals, n_clicks):
     """Display all categorization rules in a scrollable list."""
-    # Load rules from database
-    rules = db.get_rules()
+    try:
+        # Load rules from database
+        rules = db.get_rules()
 
-    if len(rules) == 0:
-        return dbc.Alert("No rules found. Rules will be created automatically when you confirm transactions and create rules.", color="info")
+        if len(rules) == 0:
+            return dbc.Alert("No rules found. Rules will be created automatically when you confirm transactions and create rules.", color="info")
 
-    # Create table data
-    rules_data = [
-        {
-            'Pattern': r.pattern,
-            'Category': r.category_id,
-            'Priority': r.priority,
-            'Created': r.created_at.split('T')[0] if 'T' in r.created_at else r.created_at[:10],
-        }
-        for r in sorted(rules, key=lambda x: (-x.priority, x.pattern))
-    ]
+        # Create table data
+        rules_data = []
+        for r in sorted(rules, key=lambda x: (-x.priority, x.pattern)):
+            # Handle created_at safely
+            created_date = "N/A"
+            if hasattr(r, 'created_at') and r.created_at:
+                try:
+                    created_str = str(r.created_at)
+                    if 'T' in created_str:
+                        created_date = created_str.split('T')[0]
+                    elif len(created_str) >= 10:
+                        created_date = created_str[:10]
+                    else:
+                        created_date = created_str
+                except:
+                    created_date = "N/A"
 
-    rules_df = pd.DataFrame(rules_data)
+            rules_data.append({
+                'Pattern': r.pattern,
+                'Category': r.category_id,
+                'Priority': r.priority,
+                'Created': created_date,
+            })
 
-    # Create table with ALL rows visible (no pagination)
-    table = dash_table.DataTable(
-        data=rules_df.to_dict('records'),
-        columns=[{'name': col, 'id': col} for col in rules_df.columns],
-        style_table={
-            'overflowX': 'auto',
-            'overflowY': 'auto',
-            'maxHeight': '70vh',  # 70% of viewport height for scrolling
-        },
-        style_cell={
-            'textAlign': 'left',
-            'padding': '12px',
-            'fontSize': '14px',
-            'minWidth': '120px',
-        },
-        style_header={
-            'backgroundColor': '#343a40',
-            'color': 'white',
-            'fontWeight': 'bold',
-            'position': 'sticky',
-            'top': 0,
-            'zIndex': 1,
-        },
-        style_data_conditional=[
-            {
-                'if': {'row_index': 'odd'},
-                'backgroundColor': '#f8f9fa',
-            }
-        ],
-        # NO PAGINATION - show all rows
-        page_action='none',
-        sort_action='native',
-        filter_action='native',
-    )
+        rules_df = pd.DataFrame(rules_data)
 
-    content = html.Div([
-        dbc.Alert([
-            html.Strong(f"Total Rules: {len(rules)}", className="me-2"),
-            html.Span("| Sorted by Priority (High → Low)", className="text-muted small"),
-        ], color="light", className="mb-3"),
-        table,
-        html.P("💡 Tip: You can sort and filter columns by clicking on headers. All rules are shown without pagination.",
-               className="mt-3 small text-muted"),
-    ])
+        # Create table with ALL rows visible (no pagination)
+        table = dash_table.DataTable(
+            data=rules_df.to_dict('records'),
+            columns=[{'name': col, 'id': col} for col in rules_df.columns],
+            style_table={
+                'overflowX': 'auto',
+                'overflowY': 'auto',
+                'maxHeight': '70vh',  # 70% of viewport height for scrolling
+            },
+            style_cell={
+                'textAlign': 'left',
+                'padding': '12px',
+                'fontSize': '14px',
+                'minWidth': '120px',
+            },
+            style_header={
+                'backgroundColor': '#343a40',
+                'color': 'white',
+                'fontWeight': 'bold',
+                'position': 'sticky',
+                'top': 0,
+                'zIndex': 1,
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': '#f8f9fa',
+                }
+            ],
+            # NO PAGINATION - show all rows
+            page_action='none',
+            sort_action='native',
+            filter_action='native',
+        )
 
-    return content
+        content = html.Div([
+            dbc.Alert([
+                html.Strong(f"Total Rules: {len(rules)}", className="me-2"),
+                html.Span("| Sorted by Priority (High → Low)", className="text-muted small"),
+            ], color="light", className="mb-3"),
+            table,
+            html.P("💡 Tip: You can sort and filter columns by clicking on headers. All rules are shown without pagination.",
+                   className="mt-3 small text-muted"),
+        ])
+
+        return content
+
+    except Exception as e:
+        # Return error message if something goes wrong
+        return dbc.Alert([
+            html.H5("❌ Error Loading Rules", className="alert-heading"),
+            html.P(f"Error: {str(e)}"),
+            html.P("Try clicking the Refresh button to reload.", className="small text-muted"),
+        ], color="danger")
 
 
 @callback(
