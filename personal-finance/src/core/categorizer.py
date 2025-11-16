@@ -153,8 +153,8 @@ class HybridCategorizer:
         start_time = time.time()
 
         for i, txn in enumerate(transactions, 1):
-            # Show progress every 50 transactions
-            if i % 50 == 0 or i == 1:
+            # Show progress every 10 transactions (more frequent updates)
+            if i % 10 == 0 or i == 1:
                 pct = (i / len(transactions)) * 100
                 elapsed = time.time() - start_time
                 eta_mins = 0.0
@@ -169,7 +169,7 @@ class HybridCategorizer:
                     print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
                           f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']}")
 
-                # Update tracker
+                # Update tracker more frequently
                 if tracker:
                     tracker.update(
                         processed=i,
@@ -179,9 +179,19 @@ class HybridCategorizer:
                         eta_minutes=eta_mins
                     )
 
-            updated_txn, method, metadata = self.categorize_transaction(
-                txn, use_ai_fallback=use_ai_fallback
-            )
+            try:
+                updated_txn, method, metadata = self.categorize_transaction(
+                    txn, use_ai_fallback=use_ai_fallback
+                )
+            except Exception as e:
+                # If individual transaction fails, mark as uncategorized and continue
+                print(f"Error categorizing transaction {txn.id}: {e}")
+                updated_txn = txn
+                updated_txn.category = "Uncategorized"
+                updated_txn.category_confidence = 0.0
+                updated_txn.category_confirmed = False
+                method = "error"
+                metadata = {"error": str(e)}
 
             if method == "rule":
                 stats["rule_matched"] += 1

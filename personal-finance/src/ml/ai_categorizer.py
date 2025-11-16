@@ -65,14 +65,14 @@ class ClaudeCategorizationEngine:
         return "\n".join(lines)
 
     def categorize_transaction(
-        self, transaction: Transaction, max_retries: int = 3
+        self, transaction: Transaction, max_retries: int = 2
     ) -> Tuple[str, float, str]:
         """
         Categorize a single transaction using Claude Haiku with retry logic.
 
         Args:
             transaction: Transaction to categorize
-            max_retries: Number of times to retry on failure (default: 3)
+            max_retries: Number of times to retry on failure (default: 2, reduced from 3)
 
         Returns:
             Tuple of (category_name, confidence, reasoning)
@@ -107,7 +107,7 @@ Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess).
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=300,
-                    timeout=30.0,  # 30 second timeout per request
+                    timeout=20.0,  # 20 second timeout per request (reduced from 30s)
                     system=[
                         {
                             "type": "text",
@@ -143,9 +143,9 @@ Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess).
                 last_error = e
                 error_str = str(e)
 
-                # Rate limit error - wait longer
+                # Rate limit error - wait and retry
                 if "rate_limit" in error_str.lower() or "429" in error_str:
-                    wait_time = 5 * (attempt + 1)  # Exponential backoff
+                    wait_time = 3 + (attempt * 2)  # 3s, 5s (reduced from 5s, 10s, 15s)
                     print(f"[Retry {attempt + 1}/{max_retries}] Rate limit - waiting {wait_time}s...")
                     time.sleep(wait_time)
                     continue

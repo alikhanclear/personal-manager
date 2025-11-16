@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Initialize tracker at the top so it's always available for error handling
+tracker = ProgressTracker()
+
 try:
     # Load database
     DB_PATH = Path("data/finance.db")
@@ -25,26 +28,44 @@ try:
 
     if len(uncategorized) == 0:
         # Mark as complete with no work
-        tracker = ProgressTracker()
         tracker.complete(0, 0, 0, 0.0, 0.0)
+        print("No uncategorized transactions found.")
         sys.exit(0)
+
+    print(f"Starting AI categorization for {len(uncategorized)} transactions...")
 
     # Get categorizer
     api_key = os.getenv("ANTHROPIC_API_KEY")
-    categorizer = HybridCategorizer(db, ai_api_key=api_key, enable_ai=bool(api_key))
+    if not api_key:
+        tracker.error("ANTHROPIC_API_KEY not found in environment")
+        print("ERROR: ANTHROPIC_API_KEY not found. Please set it in .env file.")
+        sys.exit(1)
+
+    categorizer = HybridCategorizer(db, ai_api_key=api_key, enable_ai=True)
 
     # Categorize with progress tracking
     results = categorizer.categorize_batch(
         uncategorized,
-        use_ai_fallback=bool(api_key),
+        use_ai_fallback=True,
         track_progress=True  # Enable progress tracking!
     )
 
     # Save results
+    print(f"Saving {len(results['results'])} categorized transactions...")
     categorizer.save_transaction_categories(results)
+    print("✓ AI categorization complete!")
+
+except KeyboardInterrupt:
+    # User cancelled
+    tracker.error("Process cancelled by user")
+    print("\n⚠ Process cancelled by user")
+    sys.exit(1)
 
 except Exception as e:
     # Mark as error
-    tracker = ProgressTracker()
-    tracker.error(str(e))
+    import traceback
+    error_msg = f"{str(e)}\n{traceback.format_exc()}"
+    tracker.error(error_msg)
+    print(f"❌ Error: {e}")
+    print(traceback.format_exc())
     sys.exit(1)
