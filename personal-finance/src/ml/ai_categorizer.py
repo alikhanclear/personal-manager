@@ -65,13 +65,14 @@ class ClaudeCategorizationEngine:
         return "\n".join(lines)
 
     def categorize_transaction(
-        self, transaction: Transaction
+        self, transaction: Transaction, max_retries: int = 3
     ) -> Tuple[str, float, str]:
         """
-        Categorize a single transaction using Claude Haiku.
+        Categorize a single transaction using Claude Haiku with retry logic.
 
         Args:
             transaction: Transaction to categorize
+            max_retries: Number of times to retry on failure (default: 3)
 
         Returns:
             Tuple of (category_name, confidence, reasoning)
@@ -97,46 +98,82 @@ Return ONLY a JSON object with this exact structure:
 Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess).
 """
 
-        try:
-            # Use prompt caching for category list (90% cost reduction!)
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=300,
-                system=[
-                    {
-                        "type": "text",
-                        "text": "You are a UK personal finance expert helping categorize bank transactions.",
-                    },
-                    {
-                        "type": "text",
-                        "text": self._category_context,
-                        "cache_control": {"type": "ephemeral"},  # CACHE THIS!
-                    },
-                ],
-                messages=[{"role": "user", "content": prompt}],
-            )
+        import time
+        last_error = None
 
-            # Parse response
-            response_text = response.content[0].text.strip()
+        for attempt in range(max_retries):
+            try:
+                # Use prompt caching for category list (90% cost reduction!)
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=300,
+                    timeout=30.0,  # 30 second timeout per request
+                    system=[
+                        {
+                            "type": "text",
+                            "text": "You are a UK personal finance expert helping categorize bank transactions.",
+                        },
+                        {
+                            "type": "text",
+                            "text": self._category_context,
+                            "cache_control": {"type": "ephemeral"},  # CACHE THIS!
+                        },
+                    ],
+                    messages=[{"role": "user", "content": prompt}],
+                )
 
-            # Extract JSON (handle markdown code blocks)
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
+                # Parse response
+                response_text = response.content[0].text.strip()
 
-            result = json.loads(response_text)
+                # Extract JSON (handle markdown code blocks)
+                if "```json" in response_text:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
 
-            category = result.get("category", "Uncategorized")
-            confidence = float(result.get("confidence", 0.5))
-            reasoning = result.get("reasoning", "No reasoning provided")
+                result = json.loads(response_text)
 
-            return category, confidence, reasoning
+                category = result.get("category", "Uncategorized")
+                confidence = float(result.get("confidence", 0.5))
+                reasoning = result.get("reasoning", "No reasoning provided")
 
-        except Exception as e:
-            # Fallback on error
-            print(f"AI categorization error: {e}")
-            return "Uncategorized", 0.0, f"Error: {str(e)}"
+                return category, confidence, reasoning
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+
+                # Rate limit error - wait longer
+                if "rate_limit" in error_str.lower() or "429" in error_str:
+                    wait_time = 5 * (attempt + 1)  # Exponential backoff
+                    print(f"[Retry {attempt + 1}/{max_retries}] Rate limit - waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
+                # Timeout error - retry
+                elif "timeout" in error_str.lower() or "timed out" in error_str.lower():
+                    print(f"[Retry {attempt + 1}/{max_retries}] Timeout - retrying...")
+                    time.sleep(2)
+                    continue
+
+                # Network/connection error - retry
+                elif "connection" in error_str.lower() or "network" in error_str.lower():
+                    print(f"[Retry {attempt + 1}/{max_retries}] Network error - retrying...")
+                    time.sleep(3)
+                    continue
+
+                # Other errors - log and retry
+                else:
+                    print(f"[Retry {attempt + 1}/{max_retries}] Error: {error_str[:100]}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    else:
+                        break
+
+        # All retries failed
+        print(f"❌ AI categorization failed after {max_retries} attempts: {last_error}")
+        return "Uncategorized", 0.0, f"Error after {max_retries} retries: {str(last_error)[:200]}"
 
     def categorize_batch(
         self, transactions: List[Transaction], batch_size: int = 10

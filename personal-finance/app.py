@@ -461,6 +461,7 @@ def start_ai_background(n_clicks):
 def update_ai_progress(n_intervals):
     """Poll and display AI categorization progress."""
     from src.core.progress_tracker import ProgressTracker
+    from datetime import datetime
 
     tracker = ProgressTracker()
     progress = tracker.get_progress()
@@ -479,6 +480,22 @@ def update_ai_progress(n_intervals):
         ai_categorized = progress.get('ai_categorized', 0)
         eta_minutes = progress.get('eta_minutes', 0)
 
+        # Check if progress has stalled (no update in 5 minutes)
+        updated_at_str = progress.get('updated_at', '')
+        stall_warning = None
+        if updated_at_str:
+            try:
+                updated_at = datetime.fromisoformat(updated_at_str)
+                seconds_since_update = (datetime.now() - updated_at).total_seconds()
+                if seconds_since_update > 300:  # 5 minutes
+                    stall_warning = dbc.Alert([
+                        "⚠️ Warning: No progress for 5+ minutes. Process may have stalled.",
+                        html.Br(),
+                        "Check terminal for errors or restart AI categorization.",
+                    ], color="warning", className="mt-2 mb-0 small")
+            except:
+                pass
+
         return dbc.Alert([
             html.H5("🤖 AI Categorization Running...", className="alert-heading"),
             html.Hr(),
@@ -494,6 +511,7 @@ def update_ai_progress(n_intervals):
             ], className="mb-0"),
             html.P("✓ Safe to close browser - process continues in background",
                    className="mt-3 mb-0 small text-muted"),
+            stall_warning if stall_warning else None,
         ], color="info")
 
     elif status == 'complete':
