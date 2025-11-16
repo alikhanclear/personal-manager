@@ -5,14 +5,15 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
+import hashlib
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Transaction(BaseModel):
     """Transaction record from bank statement."""
 
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = ""  # Generated deterministically from transaction properties
     date: date
     description: str
     merchant: Optional[str] = None  # Cleaned/normalized merchant name
@@ -42,6 +43,22 @@ class Transaction(BaseModel):
         if v is None:
             return v
         return Decimal(str(v))
+
+    @model_validator(mode='after')
+    def generate_id_if_empty(self):
+        """Generate deterministic ID from transaction properties if not already set."""
+        if not self.id:
+            # Create unique string from transaction properties
+            # Uses: date + description + amount + account_number
+            unique_string = (
+                f"{self.date.isoformat()}|"
+                f"{self.description}|"
+                f"{str(self.amount)}|"
+                f"{self.account_number}"
+            )
+            # Generate MD5 hash (deterministic - same input = same output)
+            self.id = hashlib.md5(unique_string.encode()).hexdigest()
+        return self
 
     class Config:
         json_encoders = {
