@@ -117,15 +117,16 @@ class HybridCategorizer:
 
     def categorize_batch(
         self, transactions: List[Transaction], use_ai_fallback: bool = True,
-        track_progress: bool = False
+        track_progress: bool = False, ai_batch_size: int = 50
     ) -> dict:
         """
-        Categorize a batch of transactions.
+        Categorize a batch of transactions with intelligent batching.
 
         Args:
             transactions: List of transactions to categorize
             use_ai_fallback: Whether to use AI for unmatched transactions
             track_progress: Whether to track progress to file (for UI)
+            ai_batch_size: Number of transactions to send to AI per API call (default: 50)
 
         Returns:
             Dictionary with categorization statistics
@@ -145,74 +146,136 @@ class HybridCategorizer:
         if tracker:
             tracker.start(len(transactions))
 
-        # Rate limiting: 45 requests/minute (buffer for 50/min limit)
-        # = 1.33 seconds between requests
-        AI_DELAY = 1.4  # seconds between AI requests
-
         import time
         start_time = time.time()
 
-        for i, txn in enumerate(transactions, 1):
-            # Show progress every 10 transactions (more frequent updates)
-            if i % 10 == 0 or i == 1:
-                pct = (i / len(transactions)) * 100
-                elapsed = time.time() - start_time
-                eta_mins = 0.0
-                if i > 1:
-                    rate = i / elapsed  # transactions per second
-                    remaining = (len(transactions) - i) / rate
-                    eta_mins = remaining / 60
-                    print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
-                          f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']} | "
-                          f"ETA: {eta_mins:.1f} min")
-                else:
-                    print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
-                          f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']}")
+        # STEP 1: Apply rules to all transactions (fast, free)
+        print(f"\n=== STEP 1: Applying rules to {len(transactions)} transactions ===")
+        uncategorized_for_ai = []
 
-                # Update tracker more frequently
+        for i, txn in enumerate(transactions, 1):
+            # Skip if already confirmed
+            if txn.category_confirmed:
+                stats["already_confirmed"] += 1
+                stats["results"].append({
+                    "transaction": txn,
+                    "method": "already_confirmed",
+                    "metadata": {},
+                })
+                continue
+
+            # Try rule matching
+            rule_match = self.rule_engine.match_transaction(txn)
+
+            if rule_match:
+                category_id, pattern, priority = rule_match
+                txn.category = category_id
+                txn.category_confidence = 1.0
+                txn.category_confirmed = False
+                stats["rule_matched"] += 1
+                stats["results"].append({
+                    "transaction": txn,
+                    "method": "rule",
+                    "metadata": {
+                        "matched_pattern": pattern,
+                        "rule_priority": priority,
+                        "cost_usd": 0.0,
+                    },
+                })
+            else:
+                # No rule match - queue for AI
+                uncategorized_for_ai.append(txn)
+
+        print(f"✓ Rules matched: {stats['rule_matched']}")
+        print(f"→ Need AI categorization: {len(uncategorized_for_ai)}")
+
+        # STEP 2: Batch AI categorization for unmatched transactions
+        if use_ai_fallback and self.ai_engine and len(uncategorized_for_ai) > 0:
+            print(f"\n=== STEP 2: AI Categorization (batches of {ai_batch_size}) ===")
+
+            # Split into batches
+            num_batches = (len(uncategorized_for_ai) + ai_batch_size - 1) // ai_batch_size
+
+            for batch_idx in range(num_batches):
+                batch_start = batch_idx * ai_batch_size
+                batch_end = min(batch_start + ai_batch_size, len(uncategorized_for_ai))
+                batch_txns = uncategorized_for_ai[batch_start:batch_end]
+
+                print(f"\nBatch {batch_idx + 1}/{num_batches}: Processing {len(batch_txns)} transactions...")
+
+                try:
+                    # Call batch AI categorization
+                    batch_results = self.ai_engine.categorize_transactions_batch(batch_txns)
+
+                    # Apply results
+                    for txn, (category, confidence, reasoning) in zip(batch_txns, batch_results):
+                        txn.category = category
+                        txn.category_confidence = confidence
+                        txn.category_confirmed = False
+
+                        if category != "Uncategorized":
+                            stats["ai_categorized"] += 1
+                        else:
+                            stats["uncategorized"] += 1
+
+                        stats["total_cost_usd"] += 0.0001  # Rough estimate per transaction
+                        stats["results"].append({
+                            "transaction": txn,
+                            "method": "ai",
+                            "metadata": {
+                                "reasoning": reasoning,
+                                "confidence": confidence,
+                                "cost_usd": 0.0001,
+                            },
+                        })
+
+                    print(f"✓ Batch {batch_idx + 1} complete: {len(batch_txns)} transactions categorized")
+
+                except Exception as e:
+                    print(f"❌ Batch {batch_idx + 1} failed: {e}")
+                    # Mark all in batch as uncategorized
+                    for txn in batch_txns:
+                        txn.category = "Uncategorized"
+                        txn.category_confidence = 0.0
+                        txn.category_confirmed = False
+                        stats["uncategorized"] += 1
+                        stats["results"].append({
+                            "transaction": txn,
+                            "method": "error",
+                            "metadata": {"error": str(e)},
+                        })
+
+                # Update progress
+                processed = stats["rule_matched"] + stats["already_confirmed"] + batch_end
                 if tracker:
+                    elapsed = time.time() - start_time
+                    remaining_batches = num_batches - (batch_idx + 1)
+                    eta_mins = (elapsed / (batch_idx + 1)) * remaining_batches / 60 if batch_idx > 0 else 0
+
                     tracker.update(
-                        processed=i,
+                        processed=processed,
                         rule_matched=stats['rule_matched'],
                         ai_categorized=stats['ai_categorized'],
                         uncategorized=stats['uncategorized'],
                         eta_minutes=eta_mins
                     )
 
-            try:
-                updated_txn, method, metadata = self.categorize_transaction(
-                    txn, use_ai_fallback=use_ai_fallback
-                )
-            except Exception as e:
-                # If individual transaction fails, mark as uncategorized and continue
-                print(f"Error categorizing transaction {txn.id}: {e}")
-                updated_txn = txn
-                updated_txn.category = "Uncategorized"
-                updated_txn.category_confidence = 0.0
-                updated_txn.category_confirmed = False
-                method = "error"
-                metadata = {"error": str(e)}
+                # Rate limit between batches (1.4s delay)
+                if batch_idx < num_batches - 1:
+                    time.sleep(1.4)
 
-            if method == "rule":
-                stats["rule_matched"] += 1
-            elif method == "ai":
-                stats["ai_categorized"] += 1
-                stats["total_cost_usd"] += metadata.get("cost_usd", 0.0)
-                # Rate limit AI requests to avoid 429 errors
-                if use_ai_fallback and i < len(transactions):
-                    time.sleep(AI_DELAY)
-            elif method == "already_confirmed":
-                stats["already_confirmed"] += 1
-            else:
+        else:
+            # No AI - mark remaining as uncategorized
+            for txn in uncategorized_for_ai:
+                txn.category = "Uncategorized"
+                txn.category_confidence = 0.0
+                txn.category_confirmed = False
                 stats["uncategorized"] += 1
-
-            stats["results"].append(
-                {
-                    "transaction": updated_txn,
-                    "method": method,
-                    "metadata": metadata,
-                }
-            )
+                stats["results"].append({
+                    "transaction": txn,
+                    "method": "none",
+                    "metadata": {},
+                })
 
         # Mark as complete
         if tracker:
@@ -224,6 +287,14 @@ class HybridCategorizer:
                 cost_usd=stats['total_cost_usd'],
                 elapsed_minutes=elapsed / 60
             )
+
+        elapsed_secs = time.time() - start_time
+        print(f"\n=== COMPLETE ===")
+        print(f"Total time: {elapsed_secs:.1f}s")
+        print(f"Rule matched: {stats['rule_matched']}")
+        print(f"AI categorized: {stats['ai_categorized']}")
+        print(f"Uncategorized: {stats['uncategorized']}")
+        print(f"Cost: ${stats['total_cost_usd']:.4f}")
 
         return stats
 

@@ -175,11 +175,135 @@ Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess).
         print(f"❌ AI categorization failed after {max_retries} attempts: {last_error}")
         return "Uncategorized", 0.0, f"Error after {max_retries} retries: {str(last_error)[:200]}"
 
+    def categorize_transactions_batch(
+        self, transactions: List[Transaction], max_retries: int = 2
+    ) -> List[Tuple[str, float, str]]:
+        """
+        Categorize multiple transactions in a SINGLE API call (true batching).
+
+        Args:
+            transactions: List of transactions to categorize (recommended: 20-50)
+            max_retries: Number of times to retry on failure
+
+        Returns:
+            List of (category, confidence, reasoning) tuples, one per transaction
+        """
+        import time
+
+        # Build batch prompt with all transactions
+        txn_list = []
+        for i, txn in enumerate(transactions, 1):
+            txn_list.append(f"""
+Transaction {i}:
+- Description: {txn.description}
+- Amount: £{txn.amount}
+- Date: {txn.date}
+- Type: {txn.transaction_type}""")
+
+        transactions_text = "\n".join(txn_list)
+
+        prompt = f"""You are a financial transaction categorizer.
+
+Categorize ALL {len(transactions)} transactions below into the available categories.
+
+{transactions_text}
+
+Return ONLY a JSON array with {len(transactions)} objects in the EXACT same order, with this structure:
+[
+  {{"category": "Category Name", "confidence": 0.95, "reasoning": "Brief explanation"}},
+  {{"category": "Category Name", "confidence": 0.85, "reasoning": "Brief explanation"}},
+  ...
+]
+
+IMPORTANT:
+- Return exactly {len(transactions)} categorizations
+- Keep the same order as the input transactions
+- Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess)
+"""
+
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                # Use prompt caching for category list
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=8000,  # Increased from 300 to handle batch responses
+                    timeout=30.0,  # Longer timeout for batch processing
+                    system=[
+                        {
+                            "type": "text",
+                            "text": "You are a UK personal finance expert helping categorize bank transactions.",
+                        },
+                        {
+                            "type": "text",
+                            "text": self._category_context,
+                            "cache_control": {"type": "ephemeral"},  # CACHE THIS!
+                        },
+                    ],
+                    messages=[{"role": "user", "content": prompt}],
+                )
+
+                # Parse response
+                response_text = response.content[0].text.strip()
+
+                # Extract JSON (handle markdown code blocks)
+                if "```json" in response_text:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
+
+                results_array = json.loads(response_text)
+
+                # Validate we got the right number of results
+                if len(results_array) != len(transactions):
+                    raise ValueError(f"Expected {len(transactions)} results, got {len(results_array)}")
+
+                # Extract results
+                categorizations = []
+                for result in results_array:
+                    category = result.get("category", "Uncategorized")
+                    confidence = float(result.get("confidence", 0.5))
+                    reasoning = result.get("reasoning", "No reasoning provided")
+                    categorizations.append((category, confidence, reasoning))
+
+                return categorizations
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+
+                # Rate limit error - wait and retry
+                if "rate_limit" in error_str.lower() or "429" in error_str:
+                    wait_time = 3 + (attempt * 2)
+                    print(f"[Batch Retry {attempt + 1}/{max_retries}] Rate limit - waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
+                # Timeout error - retry
+                elif "timeout" in error_str.lower() or "timed out" in error_str.lower():
+                    print(f"[Batch Retry {attempt + 1}/{max_retries}] Timeout - retrying...")
+                    time.sleep(2)
+                    continue
+
+                # Other errors - log and retry
+                else:
+                    print(f"[Batch Retry {attempt + 1}/{max_retries}] Error: {error_str[:200]}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    else:
+                        break
+
+        # All retries failed - return uncategorized for all
+        print(f"❌ Batch AI categorization failed after {max_retries} attempts: {last_error}")
+        return [("Uncategorized", 0.0, f"Batch error: {str(last_error)[:100]}") for _ in transactions]
+
     def categorize_batch(
         self, transactions: List[Transaction], batch_size: int = 10
     ) -> List[Tuple[Transaction, str, float, str]]:
         """
-        Categorize multiple transactions.
+        Categorize multiple transactions (legacy method - calls individual categorization).
 
         Args:
             transactions: List of transactions to categorize
