@@ -9,6 +9,9 @@ from src.data.database import FinanceDatabase
 
 DB_PATH = Path("data/finance.db")
 
+# Create data directory if it doesn't exist
+DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+
 print("=" * 80)
 print("DATABASE DEBUG")
 print("=" * 80)

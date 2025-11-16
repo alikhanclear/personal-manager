@@ -9,6 +9,10 @@ from src.core.rule_engine import create_default_rules
 from config.default_categories import DEFAULT_CATEGORIES
 
 DB_PATH = Path("data/finance.db")
+
+# Create data directory if it doesn't exist
+DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+
 db = FinanceDatabase(DB_PATH)
 
 print("=" * 80)
