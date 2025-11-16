@@ -245,6 +245,7 @@ class HybridCategorizer:
                     transaction_id=txn.id,
                     category=txn.category,
                     confirmed=txn.category_confirmed,
+                    confidence=txn.category_confidence,
                 )
                 updated += 1
             except Exception as e:

@@ -260,16 +260,17 @@ class FinanceDatabase:
         self,
         transaction_id: str,
         category: str,
-        confirmed: bool = True
+        confirmed: bool = True,
+        confidence: float = None
     ) -> None:
-        """Update transaction category and confirmation status."""
+        """Update transaction category, confidence, and confirmation status."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE transactions
-                SET category = ?, category_confirmed = ?, updated_at = ?
+                SET category = ?, category_confidence = ?, category_confirmed = ?, updated_at = ?
                 WHERE id = ?
-            """, (category, 1 if confirmed else 0, datetime.utcnow().isoformat(), transaction_id))
+            """, (category, confidence, 1 if confirmed else 0, datetime.utcnow().isoformat(), transaction_id))
             conn.commit()
 
     def _row_to_transaction(self, row: sqlite3.Row) -> Transaction:
