@@ -236,7 +236,14 @@ def create_layout():
                 dbc.Row([
                     dbc.Col([
                         html.H4("AI Categorization Review", className="mt-3 mb-3"),
-                        html.P("Review AI suggestions, correct any mistakes, and create rules for future transactions.", className="text-muted"),
+                        html.P("Review categorizations, correct any mistakes, and create rules for future transactions.", className="text-muted"),
+
+                        # Auto-refresh interval (every 5 seconds)
+                        dcc.Interval(
+                            id='review-refresh-interval',
+                            interval=5*1000,  # 5 seconds in milliseconds
+                            n_intervals=0
+                        ),
 
                         # Controls
                         dbc.Row([
@@ -245,12 +252,13 @@ def create_layout():
                                 dcc.Dropdown(
                                     id='review-filter',
                                     options=[
-                                        {'label': '⚠️ Needs Review (AI suggestions)', 'value': 'needs_review'},
+                                        {'label': '📋 Rule Matched (Auto-categorized)', 'value': 'rule_matched'},
+                                        {'label': '🤖 AI Suggestions (Needs Review)', 'value': 'ai_suggested'},
                                         {'label': '❓ Uncategorized Only', 'value': 'uncategorized'},
                                         {'label': '✓ Confirmed', 'value': 'confirmed'},
-                                        {'label': '📋 All Transactions', 'value': 'all'},
+                                        {'label': '📊 All Transactions', 'value': 'all'},
                                     ],
-                                    value='needs_review',
+                                    value='rule_matched',
                                     clearable=False,
                                 ),
                             ], width=6),
@@ -262,9 +270,19 @@ def create_layout():
                                         {'label': '10', 'value': 10},
                                         {'label': '25', 'value': 25},
                                         {'label': '50', 'value': 50},
+                                        {'label': '100', 'value': 100},
                                     ],
-                                    value=10,
+                                    value=25,
                                     clearable=False,
+                                ),
+                            ], width=3),
+                            dbc.Col([
+                                dbc.Button(
+                                    "🔄 Refresh",
+                                    id="btn-refresh-review",
+                                    color="secondary",
+                                    size="sm",
+                                    className="mt-4",
                                 ),
                             ], width=3),
                         ], className="mb-4"),
@@ -543,8 +561,10 @@ def toggle_rules(n_clicks, is_open):
     Output('review-list-container', 'children'),
     Input('review-filter', 'value'),
     Input('review-page-size', 'value'),
+    Input('review-refresh-interval', 'n_intervals'),
+    Input('btn-refresh-review', 'n_clicks'),
 )
-def update_review_list(filter_value, page_size):
+def update_review_list(filter_value, page_size, n_intervals, n_clicks):
     """Update the review list of transactions."""
     # Get all transactions
     transactions = db.get_transactions()
@@ -553,8 +573,12 @@ def update_review_list(filter_value, page_size):
         return dbc.Alert("No transactions found. Import a CSV file first.", color="info")
 
     # Apply filter
-    if filter_value == 'needs_review':
-        filtered = [t for t in transactions if t.category and not t.category_confirmed and t.category != "Uncategorized"]
+    if filter_value == 'rule_matched':
+        # Rule matched: has category, confidence = 1.0 (rules), not confirmed
+        filtered = [t for t in transactions if t.category and t.category_confidence == 1.0 and not t.category_confirmed and t.category != "Uncategorized"]
+    elif filter_value == 'ai_suggested':
+        # AI suggested: has category, confidence < 1.0 (AI), not confirmed
+        filtered = [t for t in transactions if t.category and t.category_confidence and t.category_confidence < 1.0 and not t.category_confirmed and t.category != "Uncategorized"]
     elif filter_value == 'uncategorized':
         filtered = [t for t in transactions if not t.category or t.category == "Uncategorized"]
     elif filter_value == 'confirmed':
@@ -646,9 +670,20 @@ def update_review_list(filter_value, page_size):
 
         cards.append(card)
 
-    # Summary
+    # Summary with filter description
+    filter_descriptions = {
+        'rule_matched': '📋 Rule Matched (Auto-categorized)',
+        'ai_suggested': '🤖 AI Suggestions (Needs Review)',
+        'uncategorized': '❓ Uncategorized',
+        'confirmed': '✓ Confirmed',
+        'all': '📊 All Transactions',
+    }
+
     summary = html.Div([
-        html.P(f"Showing {len(display_transactions)} of {len(filtered)} transactions", className="text-muted mb-3"),
+        dbc.Alert([
+            html.Strong(f"{filter_descriptions.get(filter_value, 'Transactions')}: "),
+            f"Showing {len(display_transactions)} of {len(filtered)} total",
+        ], color="light", className="mb-3"),
     ])
 
     return [summary] + cards
