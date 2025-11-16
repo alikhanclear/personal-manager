@@ -216,6 +216,19 @@ def create_layout():
                     ])
                 ], className="mb-3"),
 
+                # Quick Status Refresh
+                dbc.Card([
+                    dbc.CardBody([
+                        dbc.Button(
+                            "🔄 Refresh Status",
+                            id="btn-refresh-import-status",
+                            color="secondary",
+                            size="sm",
+                        ),
+                        html.Div(id='import-status-display', className="mt-3"),
+                    ])
+                ], className="mb-3"),
+
             ]),
 
             # Review Tab
@@ -283,6 +296,17 @@ def create_layout():
 
             # Stats Tab
             dbc.Tab(label="📊 Statistics", children=[
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Button(
+                            "🔄 Refresh Statistics",
+                            id="btn-refresh-stats",
+                            color="secondary",
+                            size="sm",
+                            className="mt-3 mb-3",
+                        ),
+                    ], width=12),
+                ]),
                 html.Div(id='stats-content', className="mt-3"),
             ]),
 
@@ -292,6 +316,14 @@ def create_layout():
                     dbc.Col([
                         html.H4("Categorization Rules", className="mt-3 mb-3"),
                         html.P("All rules are shown below. Scroll down to see all rules.", className="text-muted"),
+
+                        dbc.Button(
+                            "🔄 Refresh Rules",
+                            id="btn-refresh-rules",
+                            color="secondary",
+                            size="sm",
+                            className="mb-3",
+                        ),
 
                         # Auto-refresh interval (every 10 seconds)
                         dcc.Interval(
@@ -430,6 +462,46 @@ def apply_rules(n_clicks):
 
 
 @callback(
+    Output('import-status-display', 'children'),
+    Input('btn-refresh-import-status', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def refresh_import_status(n_clicks):
+    """Refresh and display current database status."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Get current stats
+        stats = db.get_statistics()
+        all_transactions = db.get_transactions()
+
+        # Count by status
+        rule_matched = len([t for t in all_transactions if t.category and t.category != "Uncategorized" and t.category_confidence == 1.0])
+        ai_categorized = len([t for t in all_transactions if t.category and t.category != "Uncategorized" and t.category_confidence is not None and t.category_confidence < 1.0])
+        uncategorized = len([t for t in all_transactions if not t.category or t.category == "Uncategorized"])
+
+        return dbc.Alert([
+            html.H5("📊 Current Status", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"📊 Total Transactions: {stats['total_transactions']}",
+                html.Br(),
+                f"✓ Rule Matched: {rule_matched}",
+                html.Br(),
+                f"🤖 AI Categorized: {ai_categorized}",
+                html.Br(),
+                f"❓ Uncategorized: {uncategorized}",
+                html.Br(),
+                f"📁 Categories: {stats['total_categories']}",
+            ]),
+        ], color="info")
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {str(e)}", color="danger")
+
+
+@callback(
     Output('ai-progress-interval', 'disabled'),
     Input('btn-start-ai-background', 'n_clicks'),
     prevent_initial_call=True,
@@ -548,9 +620,10 @@ def update_ai_progress(n_intervals):
 
 @callback(
     Output('all-rules-list', 'children'),
-    Input('rules-refresh-interval', 'n_intervals'),
+    Input('rules-refresh-interval', 'n_intervals'),  # Auto-refresh every 10s
+    Input('btn-refresh-rules', 'n_clicks'),  # Manual refresh
 )
-def display_all_rules(n_intervals):
+def display_all_rules(n_intervals, n_clicks):
     """Display all categorization rules in a scrollable list."""
     # Load rules from database
     rules = db.get_rules()
@@ -824,9 +897,10 @@ def confirm_and_create_rule(n_clicks_list, category_list, id_list):
 
 @callback(
     Output('stats-content', 'children'),
-    Input('stats-content', 'id'),  # Dummy input
+    Input('stats-content', 'id'),  # Dummy input for initial load
+    Input('btn-refresh-stats', 'n_clicks'),  # Manual refresh
 )
-def update_stats(_):
+def update_stats(_, n_clicks):
     """Update statistics page."""
     stats = db.get_statistics()
     categorizer = get_categorizer()
