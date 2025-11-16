@@ -191,19 +191,37 @@ def create_layout():
                 # Step 3: Apply AI
                 dbc.Card([
                     dbc.CardBody([
-                        html.H5("Step 3: Apply AI (Slow)", className="mb-3"),
-                        html.P("Use AI to categorize remaining transactions. Rate-limited to 45/min (~51 mins for 2,700 txns).",
-                               className="text-muted small"),
+                        html.H5("Step 3: Apply AI (Slow - Use Terminal)", className="mb-3"),
+                        html.P([
+                            "⚠️ AI categorization is slow (~51 mins for 2,700 txns). ",
+                            html.Strong("Run in terminal instead of browser:"),
+                        ], className="text-muted small"),
 
-                        dbc.Button(
-                            "🤖 Apply AI",
-                            id="btn-apply-ai",
-                            color="warning",
-                            size="lg",
-                            className="me-2",
-                        ),
+                        dbc.Alert([
+                            html.Strong("Recommended: Run in terminal"),
+                            html.Hr(),
+                            html.Code("python categorize_all.py", className="d-block mb-2"),
+                            html.Ul([
+                                html.Li("Shows progress every 50 transactions"),
+                                html.Li("Keeps running if you close browser"),
+                                html.Li("Results saved to database in real-time"),
+                                html.Li("Refresh browser to see updates"),
+                            ], className="mb-0 small"),
+                        ], color="info", className="mb-3"),
 
-                        html.Div(id='ai-status', className="mt-3"),
+                        html.Details([
+                            html.Summary("Or click here to run via browser (not recommended for >500 txns)"),
+                            html.Div([
+                                dbc.Button(
+                                    "🤖 Apply AI (Browser)",
+                                    id="btn-apply-ai",
+                                    color="warning",
+                                    size="lg",
+                                    className="mt-2",
+                                ),
+                                html.Div(id='ai-status', className="mt-3"),
+                            ]),
+                        ]),
                     ])
                 ], className="mb-3"),
 

@@ -141,11 +141,24 @@ class HybridCategorizer:
         # = 1.33 seconds between requests
         AI_DELAY = 1.4  # seconds between AI requests
 
+        import time
+        start_time = time.time()
+
         for i, txn in enumerate(transactions, 1):
             # Show progress every 50 transactions
             if i % 50 == 0 or i == 1:
-                print(f"Processing {i}/{len(transactions)} transactions... "
-                      f"(Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']})")
+                pct = (i / len(transactions)) * 100
+                elapsed = time.time() - start_time
+                if i > 1:
+                    rate = i / elapsed  # transactions per second
+                    remaining = (len(transactions) - i) / rate
+                    eta_mins = remaining / 60
+                    print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
+                          f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']} | "
+                          f"ETA: {eta_mins:.1f} min")
+                else:
+                    print(f"[{pct:5.1f}%] {i}/{len(transactions)} transactions | "
+                          f"Rules: {stats['rule_matched']}, AI: {stats['ai_categorized']}")
 
             updated_txn, method, metadata = self.categorize_transaction(
                 txn, use_ai_fallback=use_ai_fallback

@@ -54,7 +54,18 @@ if api_key and len(uncategorized) > 0:
 # Categorize
 print(f"\nCategorizing {len(uncategorized)} transactions...")
 print("=" * 80)
+print("Progress updates every 50 transactions...")
+print("You can close this window and it will keep running.")
+print("Results are saved to database in real-time.")
+print("=" * 80)
+
+import time
+start_time = time.time()
+
 results = categorizer.categorize_batch(uncategorized, use_ai_fallback=bool(api_key))
+
+elapsed = time.time() - start_time
+elapsed_mins = elapsed / 60
 
 # Save
 print("Saving results...")
@@ -64,7 +75,11 @@ categorizer.save_transaction_categories(results)
 print("\n" + "=" * 80)
 print("CATEGORIZATION COMPLETE!")
 print("=" * 80)
+print(f"⏱️  Time elapsed: {elapsed_mins:.1f} minutes ({elapsed:.0f} seconds)")
 print(f"📋 {results['rule_matched']} matched by rules (FREE)")
 print(f"🤖 {results['ai_categorized']} categorized by AI (${results['total_cost_usd']:.4f})")
 print(f"❓ {results['uncategorized']} still uncategorized")
+print("=" * 80)
+print("\n✓ Refresh your browser to see the updated transactions!")
+print("  Go to Review & Correct tab → Filter: 'AI Suggestions'")
 print("=" * 80)
