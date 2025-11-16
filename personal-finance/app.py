@@ -1,10 +1,11 @@
 """
 Personal Finance Manager - Dash UI
 
-Simple, clean interface for:
-- CSV import (NatWest format)
-- Transaction categorization (rules + AI)
-- Manual review and correction
+Workflow:
+1. Upload Transactions (button, shows status)
+2. Apply Rules (batch, fast)
+3. Apply AI (slow, rate-limited)
+4. Show Rules (view/edit)
 """
 import os
 import sys
@@ -146,60 +147,88 @@ def create_layout():
 
         # Tabs
         dbc.Tabs([
-            # Import Tab
-            dbc.Tab(label="📥 Import", children=[
-                # Step 1: Upload CSV
-                dbc.Row([
-                    dbc.Col([
-                        html.H4("Step 1: Upload CSV File", className="mt-3 mb-3"),
+            # Import & Categorize Tab
+            dbc.Tab(label="📥 Import & Categorize", children=[
+
+                # Step 1: Upload
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H5("Step 1: Upload Transactions", className="mb-3"),
 
                         dcc.Upload(
                             id='upload-csv',
-                            children=html.Div([
-                                html.I(className="fas fa-cloud-upload-alt fa-3x mb-2"),
-                                html.Br(),
-                                'Drag and Drop or ',
-                                html.A('Select NatWest CSV File')
-                            ]),
-                            style={
-                                'width': '100%',
-                                'height': '200px',
-                                'lineHeight': '200px',
-                                'borderWidth': '2px',
-                                'borderStyle': 'dashed',
-                                'borderRadius': '10px',
-                                'textAlign': 'center',
-                                'backgroundColor': '#f8f9fa',
-                            },
+                            children=dbc.Button(
+                                ["📤 Upload CSV File"],
+                                color="primary",
+                                size="lg",
+                            ),
                             multiple=False
                         ),
 
                         html.Div(id='upload-status', className="mt-3"),
+                    ])
+                ], className="mt-3 mb-3"),
 
-                    ], width=12),
-                ]),
-
-                html.Hr(className="my-4"),
-
-                # Step 2: Categorize
-                dbc.Row([
-                    dbc.Col([
-                        html.H4("Step 2: Categorize Transactions", className="mb-3"),
-                        html.P("After uploading, click below to categorize your transactions using rules and AI.", className="text-muted"),
+                # Step 2: Apply Rules
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H5("Step 2: Apply Rules (Fast)", className="mb-3"),
+                        html.P("Apply rule-based categorization first. This is instant and free.",
+                               className="text-muted small"),
 
                         dbc.Button(
-                            "🔄 Categorize Imported Transactions",
-                            id="btn-categorize",
+                            "📋 Apply Rules",
+                            id="btn-apply-rules",
                             color="success",
                             size="lg",
-                            className="mt-2 mb-3",
-                            disabled=True,
+                            className="me-2",
                         ),
 
-                        html.Div(id='categorization-status', className="mt-3"),
+                        html.Div(id='rules-status', className="mt-3"),
+                    ])
+                ], className="mb-3"),
 
-                    ], width=12),
-                ]),
+                # Step 3: Apply AI
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H5("Step 3: Apply AI (Slow)", className="mb-3"),
+                        html.P("Use AI to categorize remaining transactions. Rate-limited to 45/min (~51 mins for 2,700 txns).",
+                               className="text-muted small"),
+
+                        dbc.Button(
+                            "🤖 Apply AI",
+                            id="btn-apply-ai",
+                            color="warning",
+                            size="lg",
+                            className="me-2",
+                        ),
+
+                        html.Div(id='ai-status', className="mt-3"),
+                    ])
+                ], className="mb-3"),
+
+                # Step 4: Show Rules
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H5("View & Edit Rules", className="mb-3"),
+                        html.P("View all categorization rules and edit them.",
+                               className="text-muted small"),
+
+                        dbc.Button(
+                            "📝 Show Rules",
+                            id="btn-show-rules",
+                            color="info",
+                            size="lg",
+                        ),
+
+                        dbc.Collapse(
+                            html.Div(id='rules-list', className="mt-3"),
+                            id="rules-collapse",
+                            is_open=False,
+                        ),
+                    ])
+                ], className="mb-3"),
+
             ]),
 
             # Review Tab
@@ -274,19 +303,15 @@ app.layout = create_layout
 
 @callback(
     Output('upload-status', 'children'),
-    Output('btn-categorize', 'disabled'),
     Input('upload-csv', 'contents'),
     State('upload-csv', 'filename'),
 )
 def handle_csv_upload(contents, filename):
     """Handle CSV file upload."""
-    print(f"[DEBUG] Upload callback triggered. filename={filename}")
-
     if contents is None:
         raise PreventUpdate
 
     try:
-        print(f"[DEBUG] Processing upload...")
         # Parse uploaded file
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
@@ -306,90 +331,212 @@ def handle_csv_upload(contents, filename):
         # Clean up
         temp_file.unlink()
 
-        return (
-            dbc.Alert([
-                html.I(className="fas fa-check-circle me-2"),
-                f"Successfully imported {inserted} transactions from {filename}",
-            ], color="success"),
-            False  # Enable categorize button
-        )
+        # Get stats
+        stats = db.get_statistics()
+        uncategorized = len([t for t in db.get_transactions() if not t.category or t.category == "Uncategorized"])
+
+        return dbc.Alert([
+            html.H5("✓ Upload Complete", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"📄 File: {filename}",
+                html.Br(),
+                f"✓ Imported: {inserted} transactions",
+                html.Br(),
+                f"📊 Total in database: {stats['total_transactions']}",
+                html.Br(),
+                f"❓ Uncategorized: {uncategorized}",
+            ]),
+            html.P("👇 Now proceed to Step 2: Apply Rules", className="mb-0 small text-muted"),
+        ], color="success")
 
     except Exception as e:
-        return (
-            dbc.Alert([
-                html.I(className="fas fa-exclamation-triangle me-2"),
-                f"Error: {str(e)}",
-            ], color="danger"),
-            True  # Keep button disabled
-        )
+        return dbc.Alert([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            f"Error: {str(e)}",
+        ], color="danger")
 
 
 @callback(
-    Output('categorization-status', 'children'),
-    Input('btn-categorize', 'n_clicks'),
+    Output('rules-status', 'children'),
+    Input('btn-apply-rules', 'n_clicks'),
     prevent_initial_call=True,
 )
-def categorize_transactions(n_clicks):
-    """Categorize imported transactions."""
-    print(f"[DEBUG] Categorize button clicked! n_clicks={n_clicks}")
-
+def apply_rules(n_clicks):
+    """Apply rule-based categorization only (fast)."""
     if n_clicks is None:
-        print("[DEBUG] n_clicks is None, preventing update")
         raise PreventUpdate
 
     try:
-        print("[DEBUG] Starting categorization...")
-        # Get all transactions
-        all_transactions = db.get_transactions()
-        print(f"[Categorization] Total transactions in DB: {len(all_transactions)}")
-
         # Get uncategorized transactions
+        all_transactions = db.get_transactions()
         uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
-        print(f"[Categorization] Uncategorized: {len(uncategorized)}")
 
         if len(uncategorized) == 0:
-            if len(all_transactions) == 0:
-                return dbc.Alert("No transactions found in database. Please import a CSV file first.", color="warning")
-            else:
-                return dbc.Alert("All transactions are already categorized!", color="info")
+            return dbc.Alert("All transactions are already categorized!", color="info")
 
-        # Get categorizer (this also initializes categories and rules)
+        # Get categorizer
         categorizer = get_categorizer()
 
-        # Check rules and categories
-        stats = categorizer.get_statistics()
-        print(f"[Categorization] Rules: {stats['total_rules']}, Categories: {stats['total_categories']}")
-
-        # Categorize
-        print(f"[Categorization] Starting categorization of {len(uncategorized)} transactions...")
-        results = categorizer.categorize_batch(uncategorized, use_ai_fallback=True)
-        print(f"[Categorization] Results: {results['rule_matched']} rules, {results['ai_categorized']} AI, {results['uncategorized']} uncategorized")
+        # Categorize with rules ONLY (no AI)
+        results = categorizer.categorize_batch(uncategorized, use_ai_fallback=False)
 
         # Save results
         categorizer.save_transaction_categories(results)
 
-        # Build status message
-        rule_count = results['rule_matched']
-        ai_count = results['ai_categorized']
-        uncategorized_count = results['uncategorized']
-        cost = results['total_cost_usd']
-
-        APP_STATE["uncategorized_count"] = uncategorized_count
+        # Calculate remaining
+        remaining = results['uncategorized'] + results['ai_categorized']
 
         return dbc.Alert([
-            html.H5("✓ Categorization Complete", className="alert-heading"),
+            html.H5("✓ Rules Applied", className="alert-heading"),
             html.Hr(),
             html.P([
-                f"📋 {rule_count} matched by rules (FREE)",
+                f"📋 {results['rule_matched']} matched by rules (FREE)",
                 html.Br(),
-                f"🤖 {ai_count} categorized by AI (${cost:.4f})",
-                html.Br(),
-                f"❓ {uncategorized_count} still uncategorized",
+                f"❓ {remaining} remaining (need AI)",
             ]),
+            html.P("👇 Proceed to Step 3: Apply AI for remaining transactions",
+                   className="mb-0 small text-muted") if remaining > 0 else None,
         ], color="success")
 
     except Exception as e:
         return dbc.Alert(f"Error: {str(e)}", color="danger")
+
+
+@callback(
+    Output('ai-status', 'children'),
+    Input('btn-apply-ai', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def apply_ai(n_clicks):
+    """Apply AI categorization to remaining uncategorized transactions."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Get uncategorized transactions
+        all_transactions = db.get_transactions()
+        uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
+
+        if len(uncategorized) == 0:
+            return dbc.Alert("All transactions are already categorized!", color="info")
+
+        # Get categorizer
+        categorizer = get_categorizer()
+
+        # Check if AI is enabled
+        if not categorizer.ai_engine:
+            return dbc.Alert("AI is not enabled. Please set ANTHROPIC_API_KEY in .env file.", color="warning")
+
+        # Estimate time
+        estimated_minutes = (len(uncategorized) * 1.4) / 60
+
+        # Show progress alert
+        progress_alert = dbc.Alert([
+            html.H5("🤖 AI Categorization Started", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"Processing {len(uncategorized)} transactions...",
+                html.Br(),
+                f"⏱️ Estimated time: {estimated_minutes:.1f} minutes",
+                html.Br(),
+                html.Small("(Rate-limited to 45 requests/minute)", className="text-muted"),
+            ]),
+            dbc.Spinner(size="sm", color="primary"),
+        ], color="info")
+
+        # Categorize with AI
+        results = categorizer.categorize_batch(uncategorized, use_ai_fallback=True)
+
+        # Save results
+        categorizer.save_transaction_categories(results)
+
+        return dbc.Alert([
+            html.H5("✓ AI Categorization Complete", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"🤖 {results['ai_categorized']} categorized by AI",
+                html.Br(),
+                f"💰 Cost: ${results['total_cost_usd']:.4f}",
+                html.Br(),
+                f"❓ {results['uncategorized']} still uncategorized",
+            ]),
+            html.P("👉 Go to 'Review & Correct' tab to review AI suggestions",
+                   className="mb-0 small text-muted"),
+        ], color="success")
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {str(e)}", color="danger")
+
+
+@callback(
+    Output('rules-collapse', 'is_open'),
+    Output('rules-list', 'children'),
+    Input('btn-show-rules', 'n_clicks'),
+    State('rules-collapse', 'is_open'),
+    prevent_initial_call=True,
+)
+def toggle_rules(n_clicks, is_open):
+    """Toggle rules list visibility and populate it."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    # Toggle
+    new_state = not is_open
+
+    if new_state:
+        # Load rules from database
+        rules = db.get_rules()
+
+        if len(rules) == 0:
+            return new_state, dbc.Alert("No rules found.", color="info")
+
+        # Create table
+        rules_data = [
+            {
+                'Pattern': r.pattern,
+                'Category': r.category_id,
+                'Priority': r.priority,
+            }
+            for r in sorted(rules, key=lambda x: (-x.priority, x.pattern))
+        ]
+
+        rules_df = pd.DataFrame(rules_data)
+
+        table = dash_table.DataTable(
+            data=rules_df.to_dict('records'),
+            columns=[{'name': col, 'id': col} for col in rules_df.columns],
+            style_table={'overflowX': 'auto'},
+            style_cell={
+                'textAlign': 'left',
+                'padding': '10px',
+                'fontSize': '14px',
+            },
+            style_header={
+                'backgroundColor': '#f8f9fa',
+                'fontWeight': 'bold',
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': '#f8f9fa',
+                }
+            ],
+            page_size=20,
+            sort_action='native',
+            filter_action='native',
+        )
+
+        content = html.Div([
+            html.H6(f"Total Rules: {len(rules)}", className="mb-3"),
+            table,
+            html.P(f"💡 Tip: Use 'Add Custom Rules' script to add new rules",
+                   className="mt-3 small text-muted"),
+        ])
+
+        return new_state, content
+    else:
+        return new_state, None
 
 
 @callback(
