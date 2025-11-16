@@ -1,11 +1,11 @@
 """
 Personal Finance Manager - Dash UI
 
-Workflow:
-1. Upload Transactions (button, shows status)
-2. Apply Rules (batch, fast)
-3. Apply AI (slow, rate-limited)
-4. Show Rules (view/edit)
+Tabs:
+1. Import & Categorize - Upload CSVs, apply rules, run AI categorization
+2. Review & Correct - Review AI suggestions, confirm categories, create rules
+3. Statistics - View spending analysis and trends
+4. Rules - View and manage all categorization rules
 """
 import os
 import sys
@@ -216,28 +216,6 @@ def create_layout():
                     ])
                 ], className="mb-3"),
 
-                # Step 4: Show Rules
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H5("View & Edit Rules", className="mb-3"),
-                        html.P("View all categorization rules and edit them.",
-                               className="text-muted small"),
-
-                        dbc.Button(
-                            "📝 Show Rules",
-                            id="btn-show-rules",
-                            color="info",
-                            size="lg",
-                        ),
-
-                        dbc.Collapse(
-                            html.Div(id='rules-list', className="mt-3"),
-                            id="rules-collapse",
-                            is_open=False,
-                        ),
-                    ])
-                ], className="mb-3"),
-
             ]),
 
             # Review Tab
@@ -306,6 +284,27 @@ def create_layout():
             # Stats Tab
             dbc.Tab(label="📊 Statistics", children=[
                 html.Div(id='stats-content', className="mt-3"),
+            ]),
+
+            # Rules Tab
+            dbc.Tab(label="📝 Rules", children=[
+                dbc.Row([
+                    dbc.Col([
+                        html.H4("Categorization Rules", className="mt-3 mb-3"),
+                        html.P("All rules are shown below. Scroll down to see all rules.", className="text-muted"),
+
+                        # Auto-refresh interval (every 10 seconds)
+                        dcc.Interval(
+                            id='rules-refresh-interval',
+                            interval=10*1000,  # 10 seconds
+                            n_intervals=0
+                        ),
+
+                        # Rules list
+                        html.Div(id='all-rules-list', className="mt-3"),
+
+                    ], width=12),
+                ]),
             ]),
         ]),
 
@@ -548,73 +547,76 @@ def update_ai_progress(n_intervals):
 
 
 @callback(
-    Output('rules-collapse', 'is_open'),
-    Output('rules-list', 'children'),
-    Input('btn-show-rules', 'n_clicks'),
-    State('rules-collapse', 'is_open'),
-    prevent_initial_call=True,
+    Output('all-rules-list', 'children'),
+    Input('rules-refresh-interval', 'n_intervals'),
 )
-def toggle_rules(n_clicks, is_open):
-    """Toggle rules list visibility and populate it."""
-    if n_clicks is None:
-        raise PreventUpdate
+def display_all_rules(n_intervals):
+    """Display all categorization rules in a scrollable list."""
+    # Load rules from database
+    rules = db.get_rules()
 
-    # Toggle
-    new_state = not is_open
+    if len(rules) == 0:
+        return dbc.Alert("No rules found. Rules will be created automatically when you confirm transactions and create rules.", color="info")
 
-    if new_state:
-        # Load rules from database
-        rules = db.get_rules()
+    # Create table data
+    rules_data = [
+        {
+            'Pattern': r.pattern,
+            'Category': r.category_id,
+            'Priority': r.priority,
+            'Created': r.created_at.split('T')[0] if 'T' in r.created_at else r.created_at[:10],
+        }
+        for r in sorted(rules, key=lambda x: (-x.priority, x.pattern))
+    ]
 
-        if len(rules) == 0:
-            return new_state, dbc.Alert("No rules found.", color="info")
+    rules_df = pd.DataFrame(rules_data)
 
-        # Create table
-        rules_data = [
+    # Create table with ALL rows visible (no pagination)
+    table = dash_table.DataTable(
+        data=rules_df.to_dict('records'),
+        columns=[{'name': col, 'id': col} for col in rules_df.columns],
+        style_table={
+            'overflowX': 'auto',
+            'overflowY': 'auto',
+            'maxHeight': '70vh',  # 70% of viewport height for scrolling
+        },
+        style_cell={
+            'textAlign': 'left',
+            'padding': '12px',
+            'fontSize': '14px',
+            'minWidth': '120px',
+        },
+        style_header={
+            'backgroundColor': '#343a40',
+            'color': 'white',
+            'fontWeight': 'bold',
+            'position': 'sticky',
+            'top': 0,
+            'zIndex': 1,
+        },
+        style_data_conditional=[
             {
-                'Pattern': r.pattern,
-                'Category': r.category_id,
-                'Priority': r.priority,
-            }
-            for r in sorted(rules, key=lambda x: (-x.priority, x.pattern))
-        ]
-
-        rules_df = pd.DataFrame(rules_data)
-
-        table = dash_table.DataTable(
-            data=rules_df.to_dict('records'),
-            columns=[{'name': col, 'id': col} for col in rules_df.columns],
-            style_table={'overflowX': 'auto'},
-            style_cell={
-                'textAlign': 'left',
-                'padding': '10px',
-                'fontSize': '14px',
-            },
-            style_header={
+                'if': {'row_index': 'odd'},
                 'backgroundColor': '#f8f9fa',
-                'fontWeight': 'bold',
-            },
-            style_data_conditional=[
-                {
-                    'if': {'row_index': 'odd'},
-                    'backgroundColor': '#f8f9fa',
-                }
-            ],
-            page_size=20,
-            sort_action='native',
-            filter_action='native',
-        )
+            }
+        ],
+        # NO PAGINATION - show all rows
+        page_action='none',
+        sort_action='native',
+        filter_action='native',
+    )
 
-        content = html.Div([
-            html.H6(f"Total Rules: {len(rules)}", className="mb-3"),
-            table,
-            html.P(f"💡 Tip: Use 'Add Custom Rules' script to add new rules",
-                   className="mt-3 small text-muted"),
-        ])
+    content = html.Div([
+        dbc.Alert([
+            html.Strong(f"Total Rules: {len(rules)}", className="me-2"),
+            html.Span("| Sorted by Priority (High → Low)", className="text-muted small"),
+        ], color="light", className="mb-3"),
+        table,
+        html.P("💡 Tip: You can sort and filter columns by clicking on headers. All rules are shown without pagination.",
+               className="mt-3 small text-muted"),
+    ])
 
-        return new_state, content
-    else:
-        return new_state, None
+    return content
 
 
 @callback(
@@ -769,8 +771,8 @@ def confirm_category(n_clicks_list, category_list, id_list):
     txn_id = id_list[clicked_idx]['index']
     category = category_list[clicked_idx]
 
-    # Update transaction
-    db.update_transaction_category(txn_id, category, confirmed=True)
+    # Update transaction with confidence=1.0 (manually confirmed)
+    db.update_transaction_category(txn_id, category, confirmed=True, confidence=1.0)
     print(f"[Review] Confirmed: {txn_id} → {category}")
 
     # Return disabled state (no changes needed, page will refresh)
@@ -802,8 +804,8 @@ def confirm_and_create_rule(n_clicks_list, category_list, id_list):
     if not txn:
         raise PreventUpdate
 
-    # Update transaction
-    db.update_transaction_category(txn_id, category, confirmed=True)
+    # Update transaction with confidence=1.0 (manually confirmed)
+    db.update_transaction_category(txn_id, category, confirmed=True, confidence=1.0)
 
     # Create rule from transaction description
     categorizer = get_categorizer()
