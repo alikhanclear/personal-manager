@@ -289,8 +289,22 @@ def create_layout():
                             ], width=3),
                         ], className="mb-4"),
 
+                        # Pagination controls
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.ButtonGroup([
+                                    dbc.Button("← Previous", id="btn-prev-page", color="secondary", size="sm", disabled=True),
+                                    dbc.Button("Next →", id="btn-next-page", color="secondary", size="sm"),
+                                ]),
+                                html.Span(id="page-info", className="ms-3 text-muted small"),
+                            ], className="mb-3"),
+                        ]),
+
                         # Transaction review list
                         html.Div(id='review-list-container'),
+
+                        # Store for current page number
+                        dcc.Store(id='current-page', data=1),
 
                     ], width=12),
                 ]),
@@ -704,18 +718,22 @@ def display_all_rules(n_intervals, n_clicks):
 
 @callback(
     Output('review-list-container', 'children'),
+    Output('page-info', 'children'),
+    Output('btn-prev-page', 'disabled'),
+    Output('btn-next-page', 'disabled'),
     Input('review-filter', 'value'),
     Input('review-page-size', 'value'),
+    Input('current-page', 'data'),
     Input('review-refresh-interval', 'n_intervals'),
     Input('btn-refresh-review', 'n_clicks'),
 )
-def update_review_list(filter_value, page_size, n_intervals, n_clicks):
+def update_review_list(filter_value, page_size, current_page, n_intervals, n_clicks):
     """Update the review list of transactions."""
     # Get all transactions
     transactions = db.get_transactions()
 
     if len(transactions) == 0:
-        return dbc.Alert("No transactions found. Import a CSV file first.", color="info")
+        return dbc.Alert("No transactions found. Import a CSV file first.", color="info"), "", True, True
 
     # Apply filter
     if filter_value == 'rule_matched':
@@ -732,10 +750,24 @@ def update_review_list(filter_value, page_size, n_intervals, n_clicks):
         filtered = transactions
 
     if len(filtered) == 0:
-        return dbc.Alert(f"No transactions match filter: {filter_value}", color="info")
+        return dbc.Alert(f"No transactions match filter: {filter_value}", color="info"), "", True, True
 
-    # Limit to page size
-    display_transactions = filtered[:page_size]
+    # Calculate pagination
+    total_transactions = len(filtered)
+    total_pages = (total_transactions + page_size - 1) // page_size  # Ceiling division
+    current_page = max(1, min(current_page, total_pages))  # Clamp to valid range
+
+    # Calculate slice indices
+    start_idx = (current_page - 1) * page_size
+    end_idx = min(start_idx + page_size, total_transactions)
+    display_transactions = filtered[start_idx:end_idx]
+
+    # Page info text
+    page_info = f"Page {current_page} of {total_pages} • Showing {start_idx + 1}-{end_idx} of {total_transactions} transactions"
+
+    # Button states
+    prev_disabled = (current_page <= 1)
+    next_disabled = (current_page >= total_pages)
 
     # Get all categories for dropdown
     categories = db.get_categories()
@@ -835,7 +867,31 @@ def update_review_list(filter_value, page_size, n_intervals, n_clicks):
         ], color="light", className="mb-3"),
     ])
 
-    return [summary] + cards
+    return [summary] + cards, page_info, prev_disabled, next_disabled
+
+
+@callback(
+    Output('current-page', 'data'),
+    Input('btn-prev-page', 'n_clicks'),
+    Input('btn-next-page', 'n_clicks'),
+    Input('review-filter', 'value'),  # Reset to page 1 when filter changes
+    Input('review-page-size', 'value'),  # Reset to page 1 when page size changes
+    State('current-page', 'data'),
+    prevent_initial_call=True,
+)
+def handle_pagination(prev_clicks, next_clicks, filter_value, page_size, current_page):
+    """Handle Previous/Next button clicks."""
+    triggered_id = ctx.triggered_id
+
+    if triggered_id == 'btn-prev-page':
+        return max(1, current_page - 1)
+    elif triggered_id == 'btn-next-page':
+        return current_page + 1
+    elif triggered_id in ['review-filter', 'review-page-size']:
+        # Reset to page 1 when filter or page size changes
+        return 1
+
+    return current_page
 
 
 @callback(
