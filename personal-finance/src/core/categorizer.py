@@ -10,7 +10,6 @@ from ..data.database import FinanceDatabase
 from ..data.models import Category, Rule, Transaction
 from ..ml.ai_categorizer import ClaudeCategorizationEngine
 from .rule_engine import RuleEngine
-from .progress_tracker import ProgressTracker
 
 
 class HybridCategorizer:
@@ -117,7 +116,7 @@ class HybridCategorizer:
 
     def categorize_batch(
         self, transactions: List[Transaction], use_ai_fallback: bool = True,
-        track_progress: bool = False, ai_batch_size: int = 50
+        ai_batch_size: int = 50
     ) -> dict:
         """
         Categorize a batch of transactions with intelligent batching.
@@ -125,7 +124,6 @@ class HybridCategorizer:
         Args:
             transactions: List of transactions to categorize
             use_ai_fallback: Whether to use AI for unmatched transactions
-            track_progress: Whether to track progress to file (for UI)
             ai_batch_size: Number of transactions to send to AI per API call (default: 50)
 
         Returns:
@@ -140,11 +138,6 @@ class HybridCategorizer:
             "total_cost_usd": 0.0,
             "results": [],
         }
-
-        # Initialize progress tracker
-        tracker = ProgressTracker() if track_progress else None
-        if tracker:
-            tracker.start(len(transactions))
 
         import time
         start_time = time.time()
@@ -245,21 +238,6 @@ class HybridCategorizer:
                             "metadata": {"error": str(e)},
                         })
 
-                # Update progress
-                processed = stats["rule_matched"] + stats["already_confirmed"] + batch_end
-                if tracker:
-                    elapsed = time.time() - start_time
-                    remaining_batches = num_batches - (batch_idx + 1)
-                    eta_mins = (elapsed / (batch_idx + 1)) * remaining_batches / 60 if batch_idx > 0 else 0
-
-                    tracker.update(
-                        processed=processed,
-                        rule_matched=stats['rule_matched'],
-                        ai_categorized=stats['ai_categorized'],
-                        uncategorized=stats['uncategorized'],
-                        eta_minutes=eta_mins
-                    )
-
                 # Rate limit between batches (1.4s delay)
                 if batch_idx < num_batches - 1:
                     time.sleep(1.4)
@@ -276,17 +254,6 @@ class HybridCategorizer:
                     "method": "none",
                     "metadata": {},
                 })
-
-        # Mark as complete
-        if tracker:
-            elapsed = time.time() - start_time
-            tracker.complete(
-                rule_matched=stats['rule_matched'],
-                ai_categorized=stats['ai_categorized'],
-                uncategorized=stats['uncategorized'],
-                cost_usd=stats['total_cost_usd'],
-                elapsed_minutes=elapsed / 60
-            )
 
         elapsed_secs = time.time() - start_time
         print(f"\n=== COMPLETE ===")
