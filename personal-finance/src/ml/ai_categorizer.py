@@ -253,7 +253,14 @@ IMPORTANT:
                 elif "```" in response_text:
                     response_text = response_text.split("```")[1].split("```")[0].strip()
 
-                results_array = json.loads(response_text)
+                # Try to parse JSON
+                try:
+                    results_array = json.loads(response_text)
+                except json.JSONDecodeError as json_err:
+                    # If JSON parsing fails, log the response and retry
+                    print(f"⚠️ JSON parsing failed: {json_err}")
+                    print(f"Response preview: {response_text[:200]}...")
+                    raise ValueError(f"Invalid JSON response from AI: {json_err}")
 
                 # Handle result count mismatches gracefully
                 if len(results_array) != len(transactions):
