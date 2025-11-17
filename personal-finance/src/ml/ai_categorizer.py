@@ -267,18 +267,38 @@ Rules:
                 try:
                     results_array = json.loads(response_text)
                 except json.JSONDecodeError as json_err:
-                    # If JSON parsing fails due to control characters, try to clean and retry
+                    # If JSON parsing fails due to control characters, try to repair and retry
                     if "Invalid control character" in str(json_err):
-                        print(f"⚠️ Cleaning control characters from JSON...")
-                        # Replace common control characters that break JSON
+                        print(f"⚠️ Repairing JSON with control characters...")
+                        # More aggressive cleaning - escape control characters properly
                         import re
-                        # Replace unescaped newlines, tabs, carriage returns in strings
-                        response_text_cleaned = response_text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+
+                        # Replace literal newlines, tabs, returns with escaped versions
+                        # But only inside JSON string values (between quotes)
+                        def escape_control_chars(match):
+                            text = match.group(0)
+                            # Escape control characters
+                            text = text.replace('\n', '\\n')
+                            text = text.replace('\r', '\\r')
+                            text = text.replace('\t', '\\t')
+                            text = text.replace('\b', '\\b')
+                            text = text.replace('\f', '\\f')
+                            return text
+
+                        # Find all string values in JSON and escape control chars
+                        # Pattern matches: "key": "value with potential\ncontrol chars"
+                        response_text_repaired = re.sub(
+                            r'"[^"]*"(?=\s*[:,\]\}])',  # Match quoted strings before : or , or ] or }
+                            escape_control_chars,
+                            response_text
+                        )
+
                         try:
-                            results_array = json.loads(response_text_cleaned)
+                            results_array = json.loads(response_text_repaired)
+                            print(f"✓ JSON repaired successfully")
                         except json.JSONDecodeError as json_err2:
-                            print(f"⚠️ JSON parsing failed even after cleaning: {json_err2}")
-                            print(f"Response preview: {response_text[:200]}...")
+                            print(f"❌ JSON repair failed: {json_err2}")
+                            print(f"Response preview: {response_text[:300]}...")
                             raise ValueError(f"Invalid JSON response from AI: {json_err2}")
                     else:
                         # Different JSON error, log and raise
