@@ -192,7 +192,7 @@ def create_layout():
                 dbc.Card([
                     dbc.CardBody([
                         html.H5("Step 3: Apply AI (Fast!)", className="mb-3"),
-                        html.P("Processes 50 transactions per API call. Typically completes in 5-15 seconds.",
+                        html.P("Processes 40 transactions per API call. Typically completes in 5-15 seconds.",
                                className="text-muted small"),
 
                         dbc.Button(
@@ -538,7 +538,7 @@ def run_ai_categorization(n_clicks):
         results = categorizer.categorize_batch(
             uncategorized,
             use_ai_fallback=True,
-            ai_batch_size=50  # 50 transactions per API call
+            ai_batch_size=40  # 40 transactions per API call (Haiku's 4096 token limit)
         )
 
         # Save results

@@ -228,7 +228,7 @@ IMPORTANT:
                 # Use prompt caching for category list
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=8000,  # Increased from 300 to handle batch responses
+                    max_tokens=4096,  # Haiku's maximum output tokens
                     timeout=30.0,  # Longer timeout for batch processing
                     system=[
                         {
