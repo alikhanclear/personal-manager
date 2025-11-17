@@ -202,24 +202,25 @@ Transaction {i}:
 
         transactions_text = "\n".join(txn_list)
 
-        prompt = f"""You are a financial transaction categorizer.
-
-Categorize ALL {len(transactions)} transactions below into the available categories.
+        prompt = f"""Categorize ALL {len(transactions)} transactions below.
 
 {transactions_text}
 
-Return ONLY a JSON array with {len(transactions)} objects in the EXACT same order, with this structure:
+CRITICAL: Your response MUST be ONLY a JSON array. Do NOT include any explanatory text, markdown formatting, or anything except the JSON array itself.
+
+Return a JSON array with exactly {len(transactions)} objects in the same order:
 [
   {{"category": "Category Name", "confidence": 0.95, "reasoning": "Brief explanation"}},
-  {{"category": "Category Name", "confidence": 0.85, "reasoning": "Brief explanation"}},
-  ...
+  {{"category": "Category Name", "confidence": 0.85, "reasoning": "Brief explanation"}}
 ]
 
-IMPORTANT:
-- Return exactly {len(transactions)} categorizations
-- Keep the same order as the input transactions
-- Confidence should be 0.0 to 1.0 (1.0 = certain, 0.5 = guess)
-"""
+Rules:
+- Return EXACTLY {len(transactions)} categorizations
+- Keep the EXACT same order as input
+- Confidence: 0.0 to 1.0 (1.0 = certain, 0.5 = guess)
+- NO text before or after the JSON array
+- NO markdown code blocks
+- JUST the raw JSON array"""
 
         last_error = None
 
@@ -247,11 +248,18 @@ IMPORTANT:
                 # Parse response
                 response_text = response.content[0].text.strip()
 
-                # Extract JSON (handle markdown code blocks)
+                # Extract JSON (handle markdown code blocks and leading text)
                 if "```json" in response_text:
                     response_text = response_text.split("```json")[1].split("```")[0].strip()
                 elif "```" in response_text:
                     response_text = response_text.split("```")[1].split("```")[0].strip()
+                else:
+                    # Strip any text before the first '[' (Claude often adds intro text)
+                    if '[' in response_text:
+                        response_text = response_text[response_text.index('['):]
+                    # Strip any text after the last ']'
+                    if ']' in response_text:
+                        response_text = response_text[:response_text.rindex(']') + 1]
 
                 # Try to parse JSON
                 try:
