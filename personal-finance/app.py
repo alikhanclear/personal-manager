@@ -319,13 +319,27 @@ def create_layout():
                         html.H4("Categorization Rules", className="mt-3 mb-3"),
                         html.P("All rules are shown below. Scroll down to see all rules.", className="text-muted"),
 
-                        dbc.Button(
-                            "🔄 Refresh Rules",
-                            id="btn-refresh-rules",
-                            color="secondary",
-                            size="sm",
-                            className="mb-3",
-                        ),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Button(
+                                    "🔄 Refresh Rules",
+                                    id="btn-refresh-rules",
+                                    color="secondary",
+                                    size="sm",
+                                    className="mb-3",
+                                ),
+                            ], width=6),
+                            dbc.Col([
+                                dbc.Button(
+                                    "📥 Export Rules to Excel",
+                                    id="btn-export-rules",
+                                    color="success",
+                                    size="sm",
+                                    className="mb-3",
+                                ),
+                                dcc.Download(id="download-rules"),
+                            ], width=6, className="text-end"),
+                        ]),
 
                         # Auto-refresh interval (every 10 seconds)
                         dcc.Interval(
@@ -605,9 +619,9 @@ def display_all_rules(n_intervals, n_clicks):
         if len(rules) == 0:
             return dbc.Alert("No rules found. Rules will be created automatically when you confirm transactions and create rules.", color="info")
 
-        # Create table data
+        # Create table data with row numbers
         rules_data = []
-        for r in sorted(rules, key=lambda x: (-x.priority, x.pattern)):
+        for idx, r in enumerate(sorted(rules, key=lambda x: (-x.priority, x.pattern)), 1):
             # Handle created_at safely
             created_date = "N/A"
             if hasattr(r, 'created_at') and r.created_at:
@@ -623,6 +637,7 @@ def display_all_rules(n_intervals, n_clicks):
                     created_date = "N/A"
 
             rules_data.append({
+                'Row #': idx,
                 'Pattern': r.pattern,
                 'Category': r.category_id,
                 'Priority': r.priority,
@@ -728,7 +743,7 @@ def update_review_list(filter_value, page_size, n_intervals, n_clicks):
 
     # Build cards for each transaction
     cards = []
-    for txn in display_transactions:
+    for idx, txn in enumerate(display_transactions, 1):
         # Confidence badge
         if txn.category_confidence:
             conf_pct = int(txn.category_confidence * 100)
@@ -747,6 +762,10 @@ def update_review_list(filter_value, page_size, n_intervals, n_clicks):
 
         card = dbc.Card([
             dbc.CardBody([
+                # Row number header
+                html.Div([
+                    dbc.Badge(f"#{idx}", color="secondary", className="mb-2"),
+                ]),
                 dbc.Row([
                     # Left: Transaction details
                     dbc.Col([
@@ -964,10 +983,11 @@ def export_to_excel(n_clicks):
         if len(all_transactions) == 0:
             return None
 
-        # Convert to DataFrame with all useful fields
+        # Convert to DataFrame with all useful fields (including Row #)
         export_data = []
-        for txn in all_transactions:
+        for idx, txn in enumerate(all_transactions, 1):
             export_data.append({
+                'Row #': idx,
                 'Date': txn.date.strftime('%Y-%m-%d') if hasattr(txn.date, 'strftime') else str(txn.date),
                 'Description': txn.description,
                 'Amount': txn.amount,
@@ -1002,6 +1022,80 @@ def export_to_excel(n_clicks):
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'transactions_{timestamp}.xlsx'
+
+        return dcc.send_bytes(output.getvalue(), filename)
+
+    except Exception as e:
+        print(f"Export error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+@callback(
+    Output('download-rules', 'data'),
+    Input('btn-export-rules', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def export_rules_to_excel(n_clicks):
+    """Export all rules to Excel with row numbers."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Get all rules
+        rules = db.get_rules()
+
+        if len(rules) == 0:
+            return None
+
+        # Convert to DataFrame with row numbers
+        export_data = []
+        for idx, r in enumerate(sorted(rules, key=lambda x: (-x.priority, x.pattern)), 1):
+            # Handle created_at safely
+            created_date = "N/A"
+            if hasattr(r, 'created_at') and r.created_at:
+                try:
+                    created_str = str(r.created_at)
+                    if 'T' in created_str:
+                        created_date = created_str.split('T')[0]
+                    elif len(created_str) >= 10:
+                        created_date = created_str[:10]
+                    else:
+                        created_date = created_str
+                except:
+                    created_date = "N/A"
+
+            export_data.append({
+                'Row #': idx,
+                'Pattern': r.pattern,
+                'Category': r.category_id,
+                'Priority': r.priority,
+                'Created': created_date,
+            })
+
+        df = pd.DataFrame(export_data)
+
+        # Create Excel file in memory
+        from io import BytesIO
+        output = BytesIO()
+
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Rules')
+
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Rules']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                )
+                worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
+
+        # Generate filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'rules_{timestamp}.xlsx'
 
         return dcc.send_bytes(output.getvalue(), filename)
 
