@@ -255,9 +255,21 @@ IMPORTANT:
 
                 results_array = json.loads(response_text)
 
-                # Validate we got the right number of results
+                # Handle result count mismatches gracefully
                 if len(results_array) != len(transactions):
-                    raise ValueError(f"Expected {len(transactions)} results, got {len(results_array)}")
+                    print(f"⚠️ Warning: Expected {len(transactions)} results, got {len(results_array)}")
+
+                    # If we got fewer results, pad with Uncategorized
+                    while len(results_array) < len(transactions):
+                        results_array.append({
+                            "category": "Uncategorized",
+                            "confidence": 0.0,
+                            "reasoning": "AI skipped this transaction"
+                        })
+
+                    # If we got more results, truncate
+                    if len(results_array) > len(transactions):
+                        results_array = results_array[:len(transactions)]
 
                 # Extract results
                 categorizations = []

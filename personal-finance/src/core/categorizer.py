@@ -116,7 +116,7 @@ class HybridCategorizer:
 
     def categorize_batch(
         self, transactions: List[Transaction], use_ai_fallback: bool = True,
-        ai_batch_size: int = 40
+        ai_batch_size: int = 30
     ) -> dict:
         """
         Categorize a batch of transactions with intelligent batching.
@@ -124,7 +124,7 @@ class HybridCategorizer:
         Args:
             transactions: List of transactions to categorize
             use_ai_fallback: Whether to use AI for unmatched transactions
-            ai_batch_size: Number of transactions to send to AI per API call (default: 40)
+            ai_batch_size: Number of transactions to send to AI per API call (default: 30)
 
         Returns:
             Dictionary with categorization statistics
