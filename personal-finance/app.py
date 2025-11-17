@@ -253,7 +253,7 @@ def create_layout():
                                     value='rule_matched',
                                     clearable=False,
                                 ),
-                            ], width=6),
+                            ], width=5),
                             dbc.Col([
                                 dbc.Label("Items per page:"),
                                 dcc.Dropdown(
@@ -267,7 +267,7 @@ def create_layout():
                                     value=25,
                                     clearable=False,
                                 ),
-                            ], width=3),
+                            ], width=2),
                             dbc.Col([
                                 dbc.Button(
                                     "🔄 Refresh",
@@ -276,6 +276,16 @@ def create_layout():
                                     size="sm",
                                     className="mt-4",
                                 ),
+                            ], width=2),
+                            dbc.Col([
+                                dbc.Button(
+                                    "📥 Export to Excel",
+                                    id="btn-export-excel",
+                                    color="success",
+                                    size="sm",
+                                    className="mt-4",
+                                ),
+                                dcc.Download(id="download-excel"),
                             ], width=3),
                         ], className="mb-4"),
 
@@ -935,6 +945,71 @@ def update_footer(_):
     """Update footer statistics."""
     stats = db.get_statistics()
     return f"{stats['total_transactions']:,} transactions | {stats['total_categories']} categories"
+
+
+@callback(
+    Output('download-excel', 'data'),
+    Input('btn-export-excel', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def export_to_excel(n_clicks):
+    """Export all transactions to Excel with categories and metadata."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Get all transactions
+        all_transactions = db.get_transactions()
+
+        if len(all_transactions) == 0:
+            return None
+
+        # Convert to DataFrame with all useful fields
+        export_data = []
+        for txn in all_transactions:
+            export_data.append({
+                'Date': txn.date.strftime('%Y-%m-%d') if hasattr(txn.date, 'strftime') else str(txn.date),
+                'Description': txn.description,
+                'Amount': txn.amount,
+                'Balance': txn.balance,
+                'Account Number': txn.account_number,
+                'Transaction Type': txn.transaction_type if hasattr(txn, 'transaction_type') else '',
+                'Category': txn.category if txn.category else 'Uncategorized',
+                'Confidence': txn.category_confidence if txn.category_confidence is not None else '',
+                'Confirmed': 'Yes' if txn.category_confirmed else 'No',
+                'Transaction ID': txn.id,
+            })
+
+        df = pd.DataFrame(export_data)
+
+        # Create Excel file in memory
+        from io import BytesIO
+        output = BytesIO()
+
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Transactions')
+
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Transactions']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                )
+                worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
+
+        # Generate filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'transactions_{timestamp}.xlsx'
+
+        return dcc.send_bytes(output.getvalue(), filename)
+
+    except Exception as e:
+        print(f"Export error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 # ============================================================================
