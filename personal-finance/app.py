@@ -538,7 +538,6 @@ def run_ai_categorization(n_clicks):
         results = categorizer.categorize_batch(
             uncategorized,
             use_ai_fallback=True,
-            track_progress=False,  # No file tracking needed for inline
             ai_batch_size=50  # 50 transactions per API call
         )
 
