@@ -220,6 +220,8 @@ Rules:
 - Confidence: 0.0 to 1.0 (1.0 = certain, 0.5 = guess)
 - NO text before or after the JSON array
 - NO markdown code blocks
+- NO newlines inside strings (use spaces instead)
+- Keep reasoning brief (max 50 characters)
 - JUST the raw JSON array"""
 
         last_error = None
@@ -265,10 +267,24 @@ Rules:
                 try:
                     results_array = json.loads(response_text)
                 except json.JSONDecodeError as json_err:
-                    # If JSON parsing fails, log the response and retry
-                    print(f"⚠️ JSON parsing failed: {json_err}")
-                    print(f"Response preview: {response_text[:200]}...")
-                    raise ValueError(f"Invalid JSON response from AI: {json_err}")
+                    # If JSON parsing fails due to control characters, try to clean and retry
+                    if "Invalid control character" in str(json_err):
+                        print(f"⚠️ Cleaning control characters from JSON...")
+                        # Replace common control characters that break JSON
+                        import re
+                        # Replace unescaped newlines, tabs, carriage returns in strings
+                        response_text_cleaned = response_text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+                        try:
+                            results_array = json.loads(response_text_cleaned)
+                        except json.JSONDecodeError as json_err2:
+                            print(f"⚠️ JSON parsing failed even after cleaning: {json_err2}")
+                            print(f"Response preview: {response_text[:200]}...")
+                            raise ValueError(f"Invalid JSON response from AI: {json_err2}")
+                    else:
+                        # Different JSON error, log and raise
+                        print(f"⚠️ JSON parsing failed: {json_err}")
+                        print(f"Response preview: {response_text[:200]}...")
+                        raise ValueError(f"Invalid JSON response from AI: {json_err}")
 
                 # Handle result count mismatches gracefully
                 if len(results_array) != len(transactions):
