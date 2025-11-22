@@ -14,9 +14,9 @@ def test_ai_categorization():
     """Test AI categorization on a few transactions."""
 
     # Check API key
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("APP_ANTHROPIC_API_KEY")
     if not api_key:
-        print("❌ ERROR: ANTHROPIC_API_KEY not found in environment!")
+        print("❌ ERROR: APP_ANTHROPIC_API_KEY not found in environment!")
         print("   Please set it in your .env file")
         return
 

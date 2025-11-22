@@ -35,7 +35,7 @@ category_map = {cat.name: cat.name for cat in categories}
 added = 0
 for pattern, category_name, priority in CUSTOM_RULES:
     if category_name not in category_map:
-        print(f"⚠️  Skipping '{pattern}' - category '{category_name}' doesn't exist")
+        print(f"[WARN] Skipping '{pattern}' - category '{category_name}' doesn't exist")
         continue
 
     rule = Rule(
@@ -46,10 +46,10 @@ for pattern, category_name, priority in CUSTOM_RULES:
 
     try:
         db.insert_rule(rule)
-        print(f"✓ Added rule: '{pattern}' → {category_name}")
+        print(f"[OK] Added rule: '{pattern}' -> {category_name}")
         added += 1
     except Exception as e:
-        print(f"✗ Failed to add rule '{pattern}': {e}")
+        print(f"[ERROR] Failed to add rule '{pattern}': {e}")
 
-print(f"\n✓ Added {added} custom rules")
+print(f"\n[OK] Added {added} custom rules")
 print("\nNow run: python categorize_all.py to re-categorize with new rules")

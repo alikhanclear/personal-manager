@@ -100,3 +100,38 @@ class Rule(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat(),
         }
+
+
+class PotentialDuplicate(BaseModel):
+    """Potential duplicate transaction flagged during import."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    transaction_id: str  # ID of the duplicate transaction (same hash as original)
+
+    # Store full transaction data as JSON
+    date: date
+    description: str
+    amount: Decimal
+    balance: Optional[Decimal] = None
+    account_name: str
+    account_number: str
+
+    # Metadata
+    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    resolution: Optional[str] = None  # 'keep_both', 'keep_original', 'dismissed'
+    resolved_at: Optional[datetime] = None
+
+    @field_validator('amount', 'balance', mode='before')
+    @classmethod
+    def convert_to_decimal(cls, v):
+        """Convert amount/balance to Decimal for precision."""
+        if v is None:
+            return v
+        return Decimal(str(v))
+
+    class Config:
+        json_encoders = {
+            Decimal: str,
+            date: lambda v: v.isoformat(),
+            datetime: lambda v: v.isoformat(),
+        }

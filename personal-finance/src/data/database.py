@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import List, Optional
 
-from .models import Category, Rule, Transaction
+from .models import Category, Rule, Transaction, PotentialDuplicate
 
 
 class FinanceDatabase:
@@ -97,6 +97,28 @@ class FinanceDatabase:
                 ON rules(priority DESC)
             """)
 
+            # Potential duplicates table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS potential_duplicates (
+                    id TEXT PRIMARY KEY,
+                    transaction_id TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    amount TEXT NOT NULL,
+                    balance TEXT,
+                    account_name TEXT NOT NULL,
+                    account_number TEXT NOT NULL,
+                    detected_at TEXT NOT NULL,
+                    resolution TEXT,
+                    resolved_at TEXT
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_duplicates_resolution
+                ON potential_duplicates(resolution)
+            """)
+
             conn.commit()
 
     @contextmanager
@@ -142,55 +164,78 @@ class FinanceDatabase:
             ))
             conn.commit()
 
-    def insert_transactions_bulk(self, transactions: List[Transaction]) -> int:
+    def insert_transactions_bulk(self, transactions: List[Transaction]) -> dict:
         """
-        Insert multiple transactions in bulk.
+        Insert multiple transactions in bulk, flagging duplicates for review.
 
         Args:
             transactions: List of Transaction objects
 
         Returns:
-            Number of transactions inserted
+            Dictionary with insertion statistics:
+            - inserted: Number of new transactions inserted
+            - duplicates: Number of potential duplicates flagged
         """
         inserted = 0
+        duplicates = 0
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             for txn in transactions:
                 try:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO transactions (
-                            id, date, description, merchant, amount, balance,
-                            account_name, account_number, transaction_type,
-                            category, category_confidence, category_confirmed,
-                            tags, notes, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        txn.id,
-                        txn.date.isoformat(),
-                        txn.description,
-                        txn.merchant,
-                        str(txn.amount),
-                        str(txn.balance) if txn.balance else None,
-                        txn.account_name,
-                        txn.account_number,
-                        txn.transaction_type,
-                        txn.category,
-                        txn.category_confidence,
-                        1 if txn.category_confirmed else 0,
-                        ",".join(txn.tags) if txn.tags else "",
-                        txn.notes,
-                        txn.created_at.isoformat(),
-                        txn.updated_at.isoformat(),
-                    ))
-                    if cursor.rowcount > 0:
+                    # Check if transaction ID already exists
+                    cursor.execute("SELECT COUNT(*) FROM transactions WHERE id = ?", (txn.id,))
+                    exists = cursor.fetchone()[0] > 0
+
+                    if exists:
+                        # Transaction with same ID exists - flag as potential duplicate
+                        duplicate = PotentialDuplicate(
+                            transaction_id=txn.id,
+                            date=txn.date,
+                            description=txn.description,
+                            amount=txn.amount,
+                            balance=txn.balance,
+                            account_name=txn.account_name,
+                            account_number=txn.account_number,
+                        )
+                        self.insert_potential_duplicate(duplicate)
+                        duplicates += 1
+                    else:
+                        # New transaction - insert normally
+                        cursor.execute("""
+                            INSERT INTO transactions (
+                                id, date, description, merchant, amount, balance,
+                                account_name, account_number, transaction_type,
+                                category, category_confidence, category_confirmed,
+                                tags, notes, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            txn.id,
+                            txn.date.isoformat(),
+                            txn.description,
+                            txn.merchant,
+                            str(txn.amount),
+                            str(txn.balance) if txn.balance else None,
+                            txn.account_name,
+                            txn.account_number,
+                            txn.transaction_type,
+                            txn.category,
+                            txn.category_confidence,
+                            1 if txn.category_confirmed else 0,
+                            ",".join(txn.tags) if txn.tags else "",
+                            txn.notes,
+                            txn.created_at.isoformat(),
+                            txn.updated_at.isoformat(),
+                        ))
                         inserted += 1
+
                 except Exception as e:
-                    print(f"Warning: Failed to insert transaction {txn.id}: {e}")
+                    print(f"Warning: Failed to process transaction {txn.id}: {e}")
                     continue
 
             conn.commit()
 
-        return inserted
+        return {"inserted": inserted, "duplicates": duplicates}
 
     def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
         """Get a single transaction by ID."""
@@ -359,6 +404,153 @@ class FinanceDatabase:
             rows = cursor.fetchall()
 
         return [self._row_to_rule(row) for row in rows]
+
+    def update_rule(self, rule_id: str, pattern: str, category_id: str, priority: int) -> None:
+        """Update an existing rule."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE rules
+                SET pattern = ?, category_id = ?, priority = ?
+                WHERE id = ?
+            """, (pattern, category_id, priority, rule_id))
+            conn.commit()
+
+    def delete_rule(self, rule_id: str) -> None:
+        """Delete a rule by ID."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
+            conn.commit()
+
+    def delete_all_transactions(self) -> int:
+        """
+        Delete ALL transactions from database (preserves categories and rules).
+
+        Returns:
+            Number of transactions deleted
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM transactions")
+            count = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM transactions")
+            conn.commit()
+        return count
+
+    # ==================== POTENTIAL DUPLICATE OPERATIONS ====================
+
+    def insert_potential_duplicate(self, duplicate: PotentialDuplicate) -> None:
+        """Insert a potential duplicate transaction."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO potential_duplicates (
+                    id, transaction_id, date, description, amount, balance,
+                    account_name, account_number, detected_at, resolution, resolved_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                duplicate.id,
+                duplicate.transaction_id,
+                duplicate.date.isoformat(),
+                duplicate.description,
+                str(duplicate.amount),
+                str(duplicate.balance) if duplicate.balance else None,
+                duplicate.account_name,
+                duplicate.account_number,
+                duplicate.detected_at.isoformat(),
+                duplicate.resolution,
+                duplicate.resolved_at.isoformat() if duplicate.resolved_at else None,
+            ))
+            conn.commit()
+
+    def get_potential_duplicates(self, include_resolved: bool = False) -> List[PotentialDuplicate]:
+        """
+        Get all potential duplicates.
+
+        Args:
+            include_resolved: If True, include already resolved duplicates
+
+        Returns:
+            List of PotentialDuplicate objects
+        """
+        query = "SELECT * FROM potential_duplicates"
+        if not include_resolved:
+            query += " WHERE resolution IS NULL"
+        query += " ORDER BY detected_at DESC"
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+        return [self._row_to_potential_duplicate(row) for row in rows]
+
+    def resolve_duplicate(self, duplicate_id: str, resolution: str) -> None:
+        """
+        Mark a potential duplicate as resolved.
+
+        Args:
+            duplicate_id: ID of the duplicate record
+            resolution: 'keep_both', 'keep_original', or 'dismissed'
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE potential_duplicates
+                SET resolution = ?, resolved_at = ?
+                WHERE id = ?
+            """, (resolution, datetime.utcnow().isoformat(), duplicate_id))
+            conn.commit()
+
+    def keep_both_duplicate(self, duplicate_id: str) -> None:
+        """
+        Keep both transactions - insert the duplicate as a new transaction.
+
+        Args:
+            duplicate_id: ID of the duplicate record
+        """
+        # Get the duplicate record
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM potential_duplicates WHERE id = ?", (duplicate_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return
+
+            # Create new transaction with different ID (add timestamp to make unique)
+            new_txn = Transaction(
+                id="",  # Will be regenerated with different hash
+                date=datetime.fromisoformat(row["date"]).date(),
+                description=f"{row['description']} [DUPLICATE-{row['id'][:8]}]",  # Modify desc to create unique hash
+                amount=Decimal(row["amount"]),
+                balance=Decimal(row["balance"]) if row["balance"] else None,
+                account_name=row["account_name"],
+                account_number=row["account_number"],
+            )
+
+            # Insert the new transaction
+            self.insert_transaction(new_txn)
+
+            # Mark as resolved
+            self.resolve_duplicate(duplicate_id, "keep_both")
+
+    def _row_to_potential_duplicate(self, row: sqlite3.Row) -> PotentialDuplicate:
+        """Convert database row to PotentialDuplicate object."""
+        return PotentialDuplicate(
+            id=row["id"],
+            transaction_id=row["transaction_id"],
+            date=datetime.fromisoformat(row["date"]).date(),
+            description=row["description"],
+            amount=Decimal(row["amount"]),
+            balance=Decimal(row["balance"]) if row["balance"] else None,
+            account_name=row["account_name"],
+            account_number=row["account_number"],
+            detected_at=datetime.fromisoformat(row["detected_at"]),
+            resolution=row["resolution"],
+            resolved_at=datetime.fromisoformat(row["resolved_at"]) if row["resolved_at"] else None,
+        )
 
     def _row_to_rule(self, row: sqlite3.Row) -> Rule:
         """Convert database row to Rule object."""

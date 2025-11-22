@@ -186,7 +186,7 @@ def main():
         )
 
     # Check if AI API key is available
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("APP_ANTHROPIC_API_KEY")
 
     if api_key:
         print("\n" + "=" * 80)
@@ -247,12 +247,12 @@ def main():
 
     else:
         print("\n" + "=" * 80)
-        print("⚠️  ANTHROPIC_API_KEY not set - skipping AI test")
+        print("⚠️  APP_ANTHROPIC_API_KEY not set - skipping AI test")
         print("=" * 80)
         print("\nTo test AI categorization:")
         print("  1. Get API key from: https://console.anthropic.com/")
         print("  2. Set environment variable:")
-        print("     export ANTHROPIC_API_KEY='your-api-key'")
+        print("     export APP_ANTHROPIC_API_KEY='your-api-key'")
         print("  3. Re-run this script")
 
     # Final statistics

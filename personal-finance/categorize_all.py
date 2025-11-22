@@ -29,11 +29,11 @@ uncategorized = [t for t in all_transactions if not t.category or t.category == 
 print(f"Uncategorized transactions: {len(uncategorized)}")
 
 if len(uncategorized) == 0:
-    print("\n✓ All transactions are already categorized!")
+    print("\n[OK] All transactions are already categorized!")
     exit(0)
 
 # Get categorizer
-api_key = os.getenv("ANTHROPIC_API_KEY")
+api_key = os.getenv("APP_ANTHROPIC_API_KEY")
 categorizer = HybridCategorizer(db, ai_api_key=api_key, enable_ai=bool(api_key))
 
 # Check setup
@@ -47,9 +47,9 @@ if api_key and len(uncategorized) > 0:
     estimated_ai_calls = int(len(uncategorized) * 0.8)
     # 1.4 seconds per AI call (rate limiting)
     estimated_minutes = (estimated_ai_calls * 1.4) / 60
-    print(f"\n⏱️  Estimated time: {estimated_minutes:.1f} minutes")
-    print(f"   (Rate limited to 45 requests/minute to avoid API limits)")
-    print(f"   Rules will match instantly, AI needs ~1.4s per transaction")
+    print(f"\n[TIME] Estimated time: {estimated_minutes:.1f} minutes")
+    print(f"       (Rate limited to 45 requests/minute to avoid API limits)")
+    print(f"       Rules will match instantly, AI needs ~1.4s per transaction")
 
 # Categorize
 print(f"\nCategorizing {len(uncategorized)} transactions...")
@@ -75,11 +75,11 @@ categorizer.save_transaction_categories(results)
 print("\n" + "=" * 80)
 print("CATEGORIZATION COMPLETE!")
 print("=" * 80)
-print(f"⏱️  Time elapsed: {elapsed_mins:.1f} minutes ({elapsed:.0f} seconds)")
-print(f"📋 {results['rule_matched']} matched by rules (FREE)")
-print(f"🤖 {results['ai_categorized']} categorized by AI (${results['total_cost_usd']:.4f})")
-print(f"❓ {results['uncategorized']} still uncategorized")
+print(f"[TIME] Time elapsed: {elapsed_mins:.1f} minutes ({elapsed:.0f} seconds)")
+print(f"[RULES] {results['rule_matched']} matched by rules (FREE)")
+print(f"[AI] {results['ai_categorized']} categorized by AI (${results['total_cost_usd']:.4f})")
+print(f"[UNCAT] {results['uncategorized']} still uncategorized")
 print("=" * 80)
-print("\n✓ Refresh your browser to see the updated transactions!")
-print("  Go to Review & Correct tab → Filter: 'AI Suggestions'")
+print("\n[OK] Refresh your browser to see the updated transactions!")
+print("  Go to Review & Correct tab -> Filter: 'AI Suggestions'")
 print("=" * 80)

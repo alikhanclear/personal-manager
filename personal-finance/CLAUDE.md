@@ -129,7 +129,7 @@ personal-finance/
 ├── data/
 │   ├── finance.db                  # SQLite database
 │   └── ai_progress.json            # Progress tracking file
-├── .env                            # ANTHROPIC_API_KEY (gitignored)
+├── .env                            # APP_ANTHROPIC_API_KEY (gitignored)
 └── requirements.txt
 ```
 
@@ -242,7 +242,7 @@ personal-finance/
 
 ### Required Environment Variables
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...    # Get from console.anthropic.com
+APP_ANTHROPIC_API_KEY=sk-ant-...    # Get from console.anthropic.com
 ```
 
 ### Installation
@@ -357,6 +357,93 @@ Rules are created automatically when you click "Confirm & Create Rule" in the Re
 
 ---
 
-**Last Updated**: November 16, 2025
-**Current Session**: Fix confirm buttons and Rules tab workflow
-**Next Steps**: Budget tracking and weekly reports implementation
+**Last Updated**: November 22, 2025
+**Current Session**: Duplicate detection system + batch operations planning
+**Current Branch**: `personal-finance/dash-no-aggrid`
+
+## ✅ Completed Today (Nov 22, 2025)
+
+### 1. Fixed "Re-categorize ALL with Rules" Button
+- **OLD**: Overwrote ALL categorizations including AI suggestions
+- **NEW**: Only processes uncategorized + rule-matched transactions
+- **Preserves**: AI suggestions (confidence<1.0) and user confirmations
+
+### 2. Added "Purge All Transactions" Feature
+- New button in Rules tab with confirmation modal
+- Deletes ALL transactions, preserves rules and categories
+- Use case: Start fresh with new CSV while keeping learned rules
+
+### 3. Implemented Duplicate Detection & Review System
+**Problem Solved**: MD5 hash-based IDs were silently skipping duplicates
+- Same transaction twice in one day (e.g., 2 coffees) was being lost
+
+**New System**:
+- Database table: `potential_duplicates`
+- New tab: "🔍 Review Duplicates"
+- Upload message shows: "⚠️ Potential duplicates: X"
+- User actions: "Keep Both" or "Dismiss"
+
+**Files Changed**:
+- `src/data/models.py` - Added PotentialDuplicate model
+- `src/data/database.py` - Added duplicates table + methods
+- `app.py` - New tab + callbacks for duplicate review
+
+## 🔴 PRIORITIES FOR TOMORROW (Nov 23, 2025)
+
+### Priority 1: Batch Operations in Review & Correct Tab
+**Problem**: User must confirm/create rules one transaction at a time
+**Solution Needed**:
+- Add checkbox column to transactions table
+- Select multiple transactions
+- Batch actions:
+  - "Confirm Selected" (mark all as confirmed)
+  - "Confirm & Create Rules Selected" (create rule for each selected)
+- UX: Similar to email clients (Gmail/Outlook style)
+
+**Implementation Notes**:
+- Dash DataTable supports `row_selectable='multi'`
+- Add bulk action buttons above table
+- Process selected rows in loop
+- Show success message: "Confirmed X transactions, created Y rules"
+
+### Priority 2: Rule Conflict Detection & Resolution
+**Questions to Answer**:
+1. **Can multiple rules match the same transaction?**
+   - Test: Create 2 rules with overlapping patterns (e.g., "TESCO" and "TESCO EXPRESS")
+   - Current behavior: First matching rule wins (priority-based)
+   - Is this correct? Or should we detect conflicts?
+
+2. **What happens when user creates a rule for a transaction that already has a rule match?**
+   - Scenario: Transaction matched by Rule A, user creates Rule B for same pattern
+   - Should we: Warn user? Deactivate old rule? Allow duplicates?
+
+3. **Priority handling**:
+   - Are priorities working correctly? (higher priority = checked first)
+   - Should we show rule conflicts in UI?
+
+**Testing Plan**:
+```
+1. Import transactions with "TESCO CLUBCARD"
+2. Create Rule 1: Pattern "TESCO" → Category "Groceries"
+3. Create Rule 2: Pattern "CLUBCARD" → Category "Shopping"
+4. Re-categorize ALL with rules
+5. Check which rule wins
+6. Document expected behavior
+```
+
+**Possible Solutions**:
+- Option A: Show warnings when rules overlap (non-blocking)
+- Option B: Rule priority strictly enforced (first match wins)
+- Option C: Show all matching rules, let user choose
+- **Decision needed**: Which approach fits workflow best?
+
+## Next Steps After Priorities
+- Budget tracking and weekly reports implementation
+- Performance optimization for large datasets
+- Export enhancements
+
+---
+
+**Git Repository**: Private repo `personal-finance-fresh`
+**Database**: `data/finance.db` (SQLite)
+**Server**: http://localhost:8050/

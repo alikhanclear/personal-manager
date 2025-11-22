@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install pytest pytest-cov pytest-mock pytest-asyncio)",
+      "Bash(pytest tests/test_template.py -v)",
+      "Bash(dir /s /b src*.py)",
+      "Bash(python -m pytest tests/test_simple_verification.py -v)",
+      "WebSearch",
+      "WebFetch(domain:www.ramseysolutions.com)",
+      "WebFetch(domain:everydollar.help.ramseysolutions.com)",
+      "Bash(pip install:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(tree:*)",
+      "Bash(python app.py:*)",
+      "Bash(python:*)",
+      "Bash(taskkill:*)",
+      "Bash(nul)",
+      "Bash(git add:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ],
+    "ask": []
+  }
+}

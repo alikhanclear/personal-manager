@@ -51,9 +51,9 @@ if transactions and rules:
         match = rule_engine.match_transaction(txn)
         if match:
             category_id, pattern, priority = match
-            print(f"  ✓ MATCHED: Pattern '{pattern}' → {category_id}")
+            print(f"  [MATCH] Pattern '{pattern}' -> {category_id}")
         else:
-            print(f"  ✗ NO MATCH")
+            print(f"  [NO MATCH]")
 
             # Check what patterns are in the description
             desc_upper = txn.description.upper()
@@ -63,6 +63,6 @@ if transactions and rules:
                     matching_keywords.append(rule.pattern)
 
             if matching_keywords:
-                print(f"  💡 Found keywords in description: {matching_keywords}")
+                print(f"  [HINT] Found keywords in description: {matching_keywords}")
 
 print("\n" + "=" * 80)

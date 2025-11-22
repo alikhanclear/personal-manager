@@ -63,6 +63,52 @@ app = dash.Dash(
 
 app.title = "Personal Finance Manager"
 
+# Custom CSS to fix DataTable dropdown rendering issues
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            /* Fix for DataTable dropdown menus being clipped */
+            .dash-table-container {
+                overflow: visible !important;
+            }
+            .dash-table-container .dash-spreadsheet-container {
+                overflow: visible !important;
+                max-height: none !important;
+            }
+            .dash-table-container .dash-spreadsheet {
+                overflow: visible !important;
+            }
+            .dash-table-container .dash-spreadsheet-inner {
+                overflow: visible !important;
+            }
+            /* Force dropdown menus to appear above everything */
+            .Select-menu-outer {
+                z-index: 9999 !important;
+                position: absolute !important;
+            }
+            /* Alternative dropdown class */
+            .dash-dropdown {
+                z-index: 9999 !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
 
 # ============================================================================
 # Helper Functions
@@ -105,7 +151,7 @@ def get_categorizer():
     initialize_categories_and_rules()
 
     if APP_STATE["categorizer"] is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("APP_ANTHROPIC_API_KEY")
         APP_STATE["categorizer"] = HybridCategorizer(
             db,
             ai_api_key=api_key,
@@ -310,6 +356,35 @@ def create_layout():
                 ]),
             ]),
 
+            # Review Duplicates Tab
+            dbc.Tab(label="🔍 Review Duplicates", children=[
+                dbc.Row([
+                    dbc.Col([
+                        html.H4("Review Potential Duplicates", className="mt-3 mb-3"),
+                        html.P("These transactions have the same date, description, amount, and account as existing transactions. Decide whether to keep both or dismiss as duplicates.", className="text-muted"),
+
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Button(
+                                    "🔄 Refresh Duplicates",
+                                    id="btn-refresh-duplicates",
+                                    color="secondary",
+                                    size="sm",
+                                    className="mb-3",
+                                ),
+                            ], width=2),
+                            dbc.Col([
+                                html.Div(id='duplicates-count', className="mb-3"),
+                            ], width=10),
+                        ]),
+
+                        # Duplicates table
+                        html.Div(id='duplicates-table-container'),
+
+                    ], width=12),
+                ]),
+            ]),
+
             # Stats Tab
             dbc.Tab(label="📊 Statistics", children=[
                 dbc.Row([
@@ -331,7 +406,7 @@ def create_layout():
                 dbc.Row([
                     dbc.Col([
                         html.H4("Categorization Rules", className="mt-3 mb-3"),
-                        html.P("All rules are shown below. Scroll down to see all rules.", className="text-muted"),
+                        html.P("Click a Category cell to edit with dropdown. Pattern and Priority are editable inline.", className="text-muted"),
 
                         dbc.Row([
                             dbc.Col([
@@ -342,7 +417,25 @@ def create_layout():
                                     size="sm",
                                     className="mb-3",
                                 ),
-                            ], width=6),
+                            ], width=2),
+                            dbc.Col([
+                                dbc.Button(
+                                    "🔁 Re-categorize ALL with Rules",
+                                    id="btn-reapply-all-rules",
+                                    color="warning",
+                                    size="sm",
+                                    className="mb-3",
+                                ),
+                            ], width=3),
+                            dbc.Col([
+                                dbc.Checklist(
+                                    id='rules-case-insensitive',
+                                    options=[{'label': ' Ignore Case (Case-Insensitive)', 'value': 'ignore_case'}],
+                                    value=['ignore_case'],  # Default: case-insensitive
+                                    className="mb-3",
+                                    switch=True,
+                                ),
+                            ], width=4),
                             dbc.Col([
                                 dbc.Button(
                                     "📥 Export Rules to Excel",
@@ -352,23 +445,119 @@ def create_layout():
                                     className="mb-3",
                                 ),
                                 dcc.Download(id="download-rules"),
-                            ], width=6, className="text-end"),
+                            ], width=3, className="text-end"),
                         ]),
 
-                        # Auto-refresh interval (every 10 seconds)
-                        dcc.Interval(
-                            id='rules-refresh-interval',
-                            interval=10*1000,  # 10 seconds
-                            n_intervals=0
-                        ),
+                        # Dangerous operations row
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Button(
+                                    "🗑️ Purge All Transactions",
+                                    id="btn-purge-transactions",
+                                    color="danger",
+                                    size="sm",
+                                    className="mb-3",
+                                ),
+                            ], width=3),
+                            dbc.Col([
+                                html.Small("⚠️ This will delete ALL transactions but preserve rules and categories", className="text-danger"),
+                            ], width=9),
+                        ]),
+
+                        # Status message for re-apply all rules
+                        html.Div(id='reapply-rules-status', className="mb-3"),
+
+                        # Filter instructions
+                        dbc.Alert([
+                            html.Strong("Excel-like Filtering:", className="me-2"),
+                            html.Br(),
+                            html.Small([
+                                "Use operators in filter boxes: ",
+                                html.Code('contains "text"', className="bg-light px-1"),
+                                " | ",
+                                html.Code('= "exact"', className="bg-light px-1"),
+                                " | ",
+                                html.Code('!= "not"', className="bg-light px-1"),
+                                " | ",
+                                html.Code('> 50', className="bg-light px-1"),
+                                " | ",
+                                html.Code('< 100', className="bg-light px-1"),
+                            ], className="text-muted"),
+                        ], color="info", className="mb-3", dismissable=True),
 
                         # Rules list
                         html.Div(id='all-rules-list', className="mt-3"),
+
+                        # Inline dropdown for category editing (appears near clicked cell)
+                        html.Div(
+                            id='inline-dropdown-container',
+                            children=[
+                                html.Div([
+                                    html.Strong("Edit Category:", className="mb-2 d-block"),
+                                    dcc.Dropdown(
+                                        id='inline-category-dropdown',
+                                        clearable=False,
+                                        placeholder="Select category...",
+                                        className="mb-2",
+                                    ),
+                                    html.Div([
+                                        dbc.Button("Cancel", id="inline-cancel-btn", color="secondary", size="sm", className="me-2"),
+                                        dbc.Button("Save", id="inline-save-btn", color="primary", size="sm"),
+                                    ]),
+                                ]),
+                            ],
+                            style={
+                                'position': 'fixed',
+                                'top': '200px',
+                                'left': '50%',
+                                'transform': 'translateX(-50%)',
+                                'zIndex': 9999,
+                                'width': '300px',
+                                'display': 'none',  # Hidden by default
+                                'backgroundColor': 'white',
+                                'padding': '15px',
+                                'border': '2px solid #1976d2',
+                                'borderRadius': '8px',
+                                'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+                            }
+                        ),
+
+                        # Store for current editing rule
+                        dcc.Store(id='editing-rule-id', data=None),
 
                     ], width=12),
                 ]),
             ]),
         ]),
+
+        # Confirmation Modal for Purge
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle("⚠️ Confirm Purge All Transactions")),
+            dbc.ModalBody([
+                html.P([
+                    html.Strong("This will permanently delete ALL transactions from the database!"),
+                ], className="text-danger"),
+                html.Hr(),
+                html.P("What will be deleted:"),
+                html.Ul([
+                    html.Li("All transaction records"),
+                    html.Li("All categorization data"),
+                ]),
+                html.P("What will be preserved:"),
+                html.Ul([
+                    html.Li("All rules"),
+                    html.Li("All categories"),
+                ], className="text-success"),
+                html.Hr(),
+                html.P([
+                    html.Strong("Are you sure you want to continue?"),
+                ]),
+            ]),
+            dbc.ModalFooter([
+                dbc.Button("Cancel", id="purge-cancel", className="me-2", color="secondary"),
+                dbc.Button("Yes, Delete All Transactions", id="purge-confirm", color="danger"),
+            ]),
+        ], id="purge-modal", is_open=False),
 
         # Footer
         html.Hr(className="mt-5"),
@@ -414,7 +603,7 @@ def handle_csv_upload(contents, filename):
 
         # Import to database
         importer = TransactionImporter(db)
-        inserted = db.insert_transactions_bulk(transactions)
+        result = db.insert_transactions_bulk(transactions)
 
         # Clean up
         temp_file.unlink()
@@ -423,20 +612,43 @@ def handle_csv_upload(contents, filename):
         stats = db.get_statistics()
         uncategorized = len([t for t in db.get_transactions() if not t.category or t.category == "Uncategorized"])
 
-        return dbc.Alert([
+        # Build alert message
+        msg_parts = [
+            f"📄 File: {filename}",
+            html.Br(),
+            f"✓ Imported: {result['inserted']} new transactions",
+            html.Br(),
+            f"📊 Total in database: {stats['total_transactions']}",
+            html.Br(),
+            f"❓ Uncategorized: {uncategorized}",
+        ]
+
+        # Add duplicate warning if any
+        if result['duplicates'] > 0:
+            msg_parts.extend([
+                html.Br(),
+                html.Span(f"⚠️ Potential duplicates: {result['duplicates']}", className="text-warning fw-bold"),
+            ])
+
+        alert_color = "warning" if result['duplicates'] > 0 else "success"
+
+        alert_children = [
             html.H5("✓ Upload Complete", className="alert-heading"),
             html.Hr(),
-            html.P([
-                f"📄 File: {filename}",
-                html.Br(),
-                f"✓ Imported: {inserted} transactions",
-                html.Br(),
-                f"📊 Total in database: {stats['total_transactions']}",
-                html.Br(),
-                f"❓ Uncategorized: {uncategorized}",
-            ]),
-            html.P("👇 Now proceed to Step 2: Apply Rules", className="mb-0 small text-muted"),
-        ], color="success")
+            html.P(msg_parts),
+        ]
+
+        # Add next steps
+        if result['duplicates'] > 0:
+            alert_children.append(
+                html.P("👉 Review potential duplicates in the 'Review Duplicates' tab", className="mb-0 small")
+            )
+        else:
+            alert_children.append(
+                html.P("👇 Now proceed to Step 2: Apply Rules", className="mb-0 small text-muted")
+            )
+
+        return dbc.Alert(alert_children, color=alert_color)
 
     except Exception as e:
         return dbc.Alert([
@@ -451,40 +663,51 @@ def handle_csv_upload(contents, filename):
     prevent_initial_call=True,
 )
 def apply_rules(n_clicks):
-    """Apply rule-based categorization only (fast)."""
+    """Apply rule-based categorization ONLY to uncategorized transactions (preserves AI categorizations)."""
     if n_clicks is None:
         raise PreventUpdate
 
     try:
-        # Get uncategorized transactions
+        # Get ONLY uncategorized transactions (preserve existing categorizations)
         all_transactions = db.get_transactions()
         uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
 
+        if len(all_transactions) == 0:
+            return dbc.Alert("No transactions found. Import a CSV file first.", color="info")
+
         if len(uncategorized) == 0:
-            return dbc.Alert("All transactions are already categorized!", color="info")
+            return dbc.Alert([
+                html.H5("ℹ️ No Work Needed", className="alert-heading"),
+                html.P("All transactions are already categorized!"),
+                html.P("If you want to re-apply rules to ALL transactions (this will overwrite AI categorizations), you'll need to use a different approach.", className="small text-muted"),
+            ], color="info")
 
         # Get categorizer
         categorizer = get_categorizer()
 
-        # Categorize with rules ONLY (no AI)
+        # Categorize ONLY uncategorized transactions with rules
+        # This preserves existing AI categorizations
         results = categorizer.categorize_batch(uncategorized, use_ai_fallback=False)
 
         # Save results
         categorizer.save_transaction_categories(results)
 
-        # Calculate remaining
-        remaining = results['uncategorized'] + results['ai_categorized']
+        # Get updated counts
+        all_transactions_updated = db.get_transactions()
+        still_uncategorized = len([t for t in all_transactions_updated if not t.category or t.category == "Uncategorized"])
 
         return dbc.Alert([
-            html.H5("✓ Rules Applied", className="alert-heading"),
+            html.H5("✓ Rules Applied to Uncategorized Transactions", className="alert-heading"),
             html.Hr(),
             html.P([
+                f"📊 Processed: {len(uncategorized)} uncategorized transactions",
+                html.Br(),
                 f"📋 {results['rule_matched']} matched by rules (FREE)",
                 html.Br(),
-                f"❓ {remaining} remaining (need AI)",
+                f"❓ {still_uncategorized} still uncategorized (need AI)",
             ]),
-            html.P("👇 Proceed to Step 3: Apply AI for remaining transactions",
-                   className="mb-0 small text-muted") if remaining > 0 else None,
+            html.P("💡 Existing AI categorizations were preserved. Go to 'Review & Correct' tab to see results.",
+                   className="mb-0 small text-muted"),
         ], color="success")
 
     except Exception as e:
@@ -554,11 +777,11 @@ def run_ai_categorization(n_clicks):
 
         # Get categorizer
         import os
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("APP_ANTHROPIC_API_KEY")
         if not api_key:
             return dbc.Alert([
                 html.H5("❌ Missing API Key", className="alert-heading"),
-                html.P("ANTHROPIC_API_KEY not found in .env file."),
+                html.P("APP_ANTHROPIC_API_KEY not found in .env file."),
                 html.P("Please add your Anthropic API key to continue.", className="small text-muted"),
             ], color="danger")
 
@@ -621,11 +844,11 @@ def run_ai_categorization(n_clicks):
 
 @callback(
     Output('all-rules-list', 'children'),
-    Input('rules-refresh-interval', 'n_intervals'),  # Auto-refresh every 10s
-    Input('btn-refresh-rules', 'n_clicks'),  # Manual refresh
+    Input('btn-refresh-rules', 'n_clicks'),  # Manual refresh only
+    Input('rules-case-insensitive', 'value'),  # Case sensitivity toggle
 )
-def display_all_rules(n_intervals, n_clicks):
-    """Display all categorization rules in a scrollable list."""
+def display_all_rules(n_clicks, case_insensitive_value):
+    """Display all categorization rules in a scrollable list with Excel-like filtering."""
     try:
         # Load rules from database
         rules = db.get_rules()
@@ -633,7 +856,14 @@ def display_all_rules(n_intervals, n_clicks):
         if len(rules) == 0:
             return dbc.Alert("No rules found. Rules will be created automatically when you confirm transactions and create rules.", color="info")
 
-        # Create table data with row numbers
+        # Get all categories for dropdown
+        categories = db.get_categories()
+        category_options = [{'label': cat.name, 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
+
+        # Debug: Print category options
+        print(f"[DEBUG] Category dropdown options: {category_options}")
+
+        # Create table data with row numbers and rule IDs
         rules_data = []
         for idx, r in enumerate(sorted(rules, key=lambda x: (-x.priority, x.pattern)), 1):
             # Handle created_at safely
@@ -651,6 +881,7 @@ def display_all_rules(n_intervals, n_clicks):
                     created_date = "N/A"
 
             rules_data.append({
+                'rule_id': r.id,  # Hidden column for updates/deletes
                 'Row #': idx,
                 'Pattern': r.pattern,
                 'Category': r.category_id,
@@ -660,13 +891,34 @@ def display_all_rules(n_intervals, n_clicks):
 
         rules_df = pd.DataFrame(rules_data)
 
-        # Create table with ALL rows visible (no pagination)
+        # Determine case sensitivity from checkbox
+        case_sensitive = ('ignore_case' not in case_insensitive_value)
+
+        # Define columns with editability
+        # Note: rule_id is in the data but not in columns (hidden from user)
+        # Category is read-only - click to open modal with dropdown
+        columns = [
+            {'name': 'Row #', 'id': 'Row #', 'editable': False},
+            {'name': 'Pattern', 'id': 'Pattern', 'editable': True},
+            {
+                'name': 'Category (Click to Edit)',
+                'id': 'Category',
+                'editable': False,  # Read-only, use modal to edit
+            },
+            {'name': 'Priority', 'id': 'Priority', 'editable': True, 'type': 'numeric'},
+            {'name': 'Created', 'id': 'Created', 'editable': False},
+        ]
+
+        # Create table with ALL rows visible (no pagination) and Excel-like filtering
         table = dash_table.DataTable(
+            id='rules-table',
             data=rules_df.to_dict('records'),
-            columns=[{'name': col, 'id': col} for col in rules_df.columns],
+            columns=columns,
+            editable=True,  # Make table editable (except Category)
+            row_deletable=True,  # Add delete button for each row
             style_table={
                 'overflowX': 'auto',
-                'overflowY': 'auto',
+                # Removed overflowY to prevent clipping dropdown menus
                 'maxHeight': '70vh',  # 70% of viewport height for scrolling
             },
             style_cell={
@@ -674,6 +926,7 @@ def display_all_rules(n_intervals, n_clicks):
                 'padding': '12px',
                 'fontSize': '14px',
                 'minWidth': '120px',
+                'overflow': 'visible',  # Allow dropdowns to extend beyond cell
             },
             style_header={
                 'backgroundColor': '#343a40',
@@ -681,28 +934,64 @@ def display_all_rules(n_intervals, n_clicks):
                 'fontWeight': 'bold',
                 'position': 'sticky',
                 'top': 0,
-                'zIndex': 1,
+                'zIndex': 10,  # Increased from 1 to prevent dropdown overlap issues
+            },
+            style_data={
+                'overflow': 'visible',  # Allow dropdown menus to extend beyond row
             },
             style_data_conditional=[
                 {
                     'if': {'row_index': 'odd'},
                     'backgroundColor': '#f8f9fa',
+                },
+                {
+                    'if': {'column_id': 'Category'},
+                    'backgroundColor': '#e3f2fd',  # Light blue to indicate clickable
+                    'cursor': 'pointer',
+                    'textDecoration': 'underline',
+                    'color': '#1976d2',  # Blue text
                 }
             ],
             # NO PAGINATION - show all rows
             page_action='none',
             sort_action='native',
             filter_action='native',
+            # Excel-like filtering with case sensitivity control
+            filter_options={
+                'case': 'sensitive' if case_sensitive else 'insensitive',
+                'placeholder_text': 'Filter...',
+            },
         )
+
+        # Status message about case sensitivity
+        case_status = "Case-Sensitive" if case_sensitive else "Case-Insensitive"
 
         content = html.Div([
             dbc.Alert([
                 html.Strong(f"Total Rules: {len(rules)}", className="me-2"),
-                html.Span("| Sorted by Priority (High → Low)", className="text-muted small"),
+                html.Span(f"| Sorted by Priority (High → Low) | Filtering: {case_status}", className="text-muted small"),
             ], color="light", className="mb-3"),
             table,
-            html.P("💡 Tip: You can sort and filter columns by clicking on headers. All rules are shown without pagination.",
-                   className="mt-3 small text-muted"),
+            dbc.Alert([
+                html.Strong("💡 Editing Rules:", className="me-2"),
+                html.Br(),
+                "• Click any cell in Pattern, Category, or Priority columns to edit",
+                html.Br(),
+                "• Changes are saved automatically",
+                html.Br(),
+                "• Click the ❌ button to delete a rule",
+                html.Br(),
+                "• After editing, go to 'Import & Categorize' tab and click 'Apply Rules' to recategorize all transactions",
+            ], color="success", className="mt-3 mb-3", dismissable=True),
+            html.P([
+                "Filter Tip: Type in the filter boxes below column headers. ",
+                "Use operators like: ",
+                html.Code('contains "text"'),
+                ", ",
+                html.Code('= "exact"'),
+                ", ",
+                html.Code('> 10'),
+            ], className="mt-3 small text-muted"),
         ])
 
         return content
@@ -714,6 +1003,56 @@ def display_all_rules(n_intervals, n_clicks):
             html.P(f"Error: {str(e)}"),
             html.P("Try clicking the Refresh button to reload.", className="small text-muted"),
         ], color="danger")
+
+
+@callback(
+    Output('rules-table', 'data', allow_duplicate=True),
+    Input('rules-table', 'data'),
+    State('rules-table', 'data_previous'),
+    prevent_initial_call=True,
+)
+def save_rule_edits(current_data, previous_data):
+    """Save rule edits to database when table is edited or rows are deleted."""
+    if current_data is None or previous_data is None:
+        raise PreventUpdate
+
+    try:
+        # Convert to dictionaries keyed by rule_id for easy comparison
+        current_rules = {row['rule_id']: row for row in current_data if 'rule_id' in row}
+        previous_rules = {row['rule_id']: row for row in previous_data if 'rule_id' in row}
+
+        # Find deleted rules
+        deleted_ids = set(previous_rules.keys()) - set(current_rules.keys())
+        for rule_id in deleted_ids:
+            db.delete_rule(rule_id)
+            print(f"[Rules] Deleted rule: {rule_id}")
+
+        # Find updated rules
+        for rule_id, current_row in current_rules.items():
+            if rule_id in previous_rules:
+                previous_row = previous_rules[rule_id]
+                # Check if any field changed
+                if (current_row['Pattern'] != previous_row['Pattern'] or
+                    current_row['Category'] != previous_row['Category'] or
+                    current_row['Priority'] != previous_row['Priority']):
+
+                    # Update the rule
+                    db.update_rule(
+                        rule_id=rule_id,
+                        pattern=current_row['Pattern'],
+                        category_id=current_row['Category'],
+                        priority=int(current_row['Priority']),
+                    )
+                    print(f"[Rules] Updated rule: {rule_id} - Pattern: '{current_row['Pattern']}', Category: {current_row['Category']}, Priority: {current_row['Priority']}")
+
+        return current_data
+
+    except Exception as e:
+        print(f"[Rules] Error saving edits: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return previous data if error
+        return previous_data if previous_data else current_data
 
 
 @callback(
@@ -1160,6 +1499,479 @@ def export_rules_to_excel(n_clicks):
         import traceback
         traceback.print_exc()
         return None
+
+
+@callback(
+    Output('reapply-rules-status', 'children'),
+    Input('btn-reapply-all-rules', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def reapply_all_rules(n_clicks):
+    """Re-apply rules to uncategorized and rule-matched transactions (preserves AI suggestions and user confirmations)."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Get ALL transactions
+        all_transactions = db.get_transactions()
+
+        if len(all_transactions) == 0:
+            return dbc.Alert("No transactions found.", color="info")
+
+        # Filter to ONLY:
+        # 1. Uncategorized transactions
+        # 2. Rule-matched transactions (confidence=1.0, confirmed=False) - to pick up rule updates
+        # SKIP:
+        # 1. AI suggestions (confidence<1.0) - preserve for review
+        # 2. User-confirmed transactions (confirmed=True) - user already validated
+        transactions_to_recategorize = [
+            t for t in all_transactions
+            if (
+                # Uncategorized
+                (not t.category or t.category == "Uncategorized")
+                # OR rule-matched (not confirmed)
+                or (t.category and t.category != "Uncategorized" and t.category_confidence == 1.0 and not t.category_confirmed)
+            )
+        ]
+
+        ai_suggestions_count = len([t for t in all_transactions if t.category and t.category != "Uncategorized" and t.category_confidence is not None and t.category_confidence < 1.0])
+        user_confirmed_count = len([t for t in all_transactions if t.category_confirmed])
+
+        if len(transactions_to_recategorize) == 0:
+            return dbc.Alert([
+                html.H5("ℹ️ No Work Needed", className="alert-heading"),
+                html.P("All transactions are either AI suggestions (awaiting review) or user-confirmed."),
+                html.P([
+                    f"🤖 AI suggestions preserved: {ai_suggestions_count}",
+                    html.Br(),
+                    f"✓ User-confirmed preserved: {user_confirmed_count}",
+                ], className="mb-0 small"),
+            ], color="info")
+
+        # Get categorizer
+        categorizer = get_categorizer()
+
+        # Categorize filtered transactions with rules ONLY (no AI)
+        results = categorizer.categorize_batch(transactions_to_recategorize, use_ai_fallback=False)
+
+        # Save results
+        categorizer.save_transaction_categories(results)
+
+        # Get updated stats
+        all_transactions_updated = db.get_transactions()
+        rule_matched = len([t for t in all_transactions_updated if t.category and t.category != "Uncategorized" and t.category_confidence == 1.0])
+        uncategorized = len([t for t in all_transactions_updated if not t.category or t.category == "Uncategorized"])
+
+        return dbc.Alert([
+            html.H5("✓ Re-applied Rules Successfully", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"📊 Transactions processed: {len(transactions_to_recategorize)}",
+                html.Br(),
+                f"📋 Matched by rules: {rule_matched}",
+                html.Br(),
+                f"❓ Still uncategorized: {uncategorized}",
+            ]),
+            html.P([
+                html.Strong("✓ Preserved: ", className="text-success"),
+                f"{ai_suggestions_count} AI suggestions and {user_confirmed_count} user confirmations",
+            ], className="mb-0 small"),
+        ], color="success")
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {str(e)}", color="danger")
+
+
+@callback(
+    Output('inline-dropdown-container', 'style'),
+    Output('inline-category-dropdown', 'options'),
+    Output('inline-category-dropdown', 'value'),
+    Output('editing-rule-id', 'data'),
+    Input('rules-table', 'active_cell'),
+    State('rules-table', 'data'),
+    prevent_initial_call=True,
+)
+def show_inline_dropdown(active_cell, table_data):
+    """Show inline dropdown when user clicks on a Category cell."""
+    if not active_cell:
+        raise PreventUpdate
+
+    # Check if clicked cell is in Category column
+    if active_cell['column_id'] != 'Category':
+        raise PreventUpdate
+
+    # Get the row data
+    row_idx = active_cell['row']
+    row_data = table_data[row_idx]
+
+    # Get categories for dropdown
+    categories = db.get_categories()
+    category_options = [{'label': cat.name, 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
+
+    # Get current values
+    rule_id = row_data['rule_id']
+    current_category = row_data['Category']
+
+    print(f"[Inline] Showing dropdown for rule: {rule_id}, Category: {current_category}")
+
+    # Show container
+    visible_style = {
+        'position': 'fixed',
+        'top': '200px',
+        'left': '50%',
+        'transform': 'translateX(-50%)',
+        'zIndex': 9999,
+        'width': '300px',
+        'display': 'block',
+        'backgroundColor': 'white',
+        'padding': '15px',
+        'border': '2px solid #1976d2',
+        'borderRadius': '8px',
+        'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+    }
+
+    return visible_style, category_options, current_category, rule_id
+
+
+@callback(
+    Output('inline-dropdown-container', 'style', allow_duplicate=True),
+    Input('inline-cancel-btn', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def hide_inline_dropdown(n_clicks):
+    """Hide dropdown when Cancel is clicked."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    hidden_style = {
+        'position': 'fixed',
+        'top': '200px',
+        'left': '50%',
+        'transform': 'translateX(-50%)',
+        'zIndex': 9999,
+        'width': '300px',
+        'display': 'none',
+        'backgroundColor': 'white',
+        'padding': '15px',
+        'border': '2px solid #1976d2',
+        'borderRadius': '8px',
+        'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+    }
+
+    return hidden_style
+
+
+@callback(
+    Output('inline-dropdown-container', 'style', allow_duplicate=True),
+    Output('btn-refresh-rules', 'n_clicks'),
+    Input('inline-save-btn', 'n_clicks'),
+    State('editing-rule-id', 'data'),
+    State('inline-category-dropdown', 'value'),
+    State('rules-table', 'data'),
+    prevent_initial_call=True,
+)
+def save_inline_category_change(n_clicks, rule_id, new_category, table_data):
+    """Save category change when Save button is clicked."""
+    if n_clicks is None or not rule_id or not new_category:
+        raise PreventUpdate
+
+    try:
+        # Find the rule in table_data to get other values
+        rule_row = next((row for row in table_data if row['rule_id'] == rule_id), None)
+        if not rule_row:
+            print(f"[Inline] Error: Could not find rule {rule_id}")
+            raise PreventUpdate
+
+        # Update the rule in database
+        db.update_rule(
+            rule_id=rule_id,
+            pattern=rule_row['Pattern'],
+            category_id=new_category,
+            priority=int(rule_row['Priority']),
+        )
+
+        print(f"[Inline] Saved: Rule {rule_id} → Category: {new_category}")
+
+        # Hide dropdown and trigger refresh
+        hidden_style = {
+            'position': 'fixed',
+            'top': '200px',
+            'left': '50%',
+            'transform': 'translateX(-50%)',
+            'zIndex': 9999,
+            'width': '300px',
+            'display': 'none',
+            'backgroundColor': 'white',
+            'padding': '15px',
+            'border': '2px solid #1976d2',
+            'borderRadius': '8px',
+            'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+        }
+
+        return hidden_style, 1  # Hide dropdown and refresh table
+
+    except Exception as e:
+        print(f"[Inline] Error saving category: {e}")
+        import traceback
+        traceback.print_exc()
+        raise PreventUpdate
+
+
+@callback(
+    Output('duplicates-table-container', 'children'),
+    Output('duplicates-count', 'children'),
+    Input('btn-refresh-duplicates', 'n_clicks'),
+    prevent_initial_call=False,
+)
+def load_duplicates_table(n_clicks):
+    """Load and display potential duplicates."""
+    try:
+        # Get pending duplicates
+        duplicates = db.get_potential_duplicates(include_resolved=False)
+
+        if len(duplicates) == 0:
+            return dbc.Alert("✓ No pending duplicates to review!", color="success"), html.Span(f"Pending: 0", className="text-success")
+
+        # Build table data
+        table_data = []
+        for dup in duplicates:
+            table_data.append({
+                'duplicate_id': dup.id,
+                'Date': dup.date.strftime('%Y-%m-%d'),
+                'Description': dup.description,
+                'Amount': f"£{dup.amount:,.2f}",
+                'Account': dup.account_name,
+                'Detected': dup.detected_at.strftime('%Y-%m-%d %H:%M'),
+            })
+
+        # Create table with action buttons
+        table = dash_table.DataTable(
+            id='duplicates-table',
+            columns=[
+                {'name': 'Date', 'id': 'Date'},
+                {'name': 'Description', 'id': 'Description'},
+                {'name': 'Amount', 'id': 'Amount'},
+                {'name': 'Account', 'id': 'Account'},
+                {'name': 'Detected', 'id': 'Detected'},
+            ],
+            data=table_data,
+            page_size=20,
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px'},
+            style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold'},
+            row_selectable='multi',
+            selected_rows=[],
+        )
+
+        # Action buttons
+        buttons = dbc.Row([
+            dbc.Col([
+                dbc.Button("✓ Keep Both Selected", id="btn-keep-both", color="success", size="sm", className="me-2"),
+                dbc.Button("✗ Dismiss Selected", id="btn-dismiss-duplicates", color="danger", size="sm"),
+            ], className="mt-3 mb-3"),
+        ])
+
+        count_msg = html.Span(f"Pending: {len(duplicates)}", className="text-warning fw-bold")
+
+        return html.Div([buttons, table]), count_msg
+
+    except Exception as e:
+        print(f"Error loading duplicates: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Error: {str(e)}", color="danger"), html.Span("Error", className="text-danger")
+
+
+@callback(
+    Output('duplicates-table-container', 'children', allow_duplicate=True),
+    Output('duplicates-count', 'children', allow_duplicate=True),
+    Input('btn-keep-both', 'n_clicks'),
+    State('duplicates-table', 'selected_rows'),
+    State('duplicates-table', 'data'),
+    prevent_initial_call=True,
+)
+def keep_both_selected(n_clicks, selected_rows, table_data):
+    """Keep both transactions for selected duplicates."""
+    if not selected_rows or len(selected_rows) == 0:
+        raise PreventUpdate
+
+    try:
+        for idx in selected_rows:
+            duplicate_id = table_data[idx]['duplicate_id']
+            db.keep_both_duplicate(duplicate_id)
+
+        # Reload table
+        duplicates = db.get_potential_duplicates(include_resolved=False)
+
+        if len(duplicates) == 0:
+            return dbc.Alert("✓ No pending duplicates to review!", color="success"), html.Span(f"Pending: 0", className="text-success")
+
+        # Rebuild table (same logic as load_duplicates_table)
+        table_data = []
+        for dup in duplicates:
+            table_data.append({
+                'duplicate_id': dup.id,
+                'Date': dup.date.strftime('%Y-%m-%d'),
+                'Description': dup.description,
+                'Amount': f"£{dup.amount:,.2f}",
+                'Account': dup.account_name,
+                'Detected': dup.detected_at.strftime('%Y-%m-%d %H:%M'),
+            })
+
+        table = dash_table.DataTable(
+            id='duplicates-table',
+            columns=[
+                {'name': 'Date', 'id': 'Date'},
+                {'name': 'Description', 'id': 'Description'},
+                {'name': 'Amount', 'id': 'Amount'},
+                {'name': 'Account', 'id': 'Account'},
+                {'name': 'Detected', 'id': 'Detected'},
+            ],
+            data=table_data,
+            page_size=20,
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px'},
+            style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold'},
+            row_selectable='multi',
+            selected_rows=[],
+        )
+
+        buttons = dbc.Row([
+            dbc.Col([
+                dbc.Button("✓ Keep Both Selected", id="btn-keep-both", color="success", size="sm", className="me-2"),
+                dbc.Button("✗ Dismiss Selected", id="btn-dismiss-duplicates", color="danger", size="sm"),
+            ], className="mt-3 mb-3"),
+        ])
+
+        count_msg = html.Span(f"Pending: {len(duplicates)}", className="text-warning fw-bold")
+
+        return html.Div([buttons, table]), count_msg
+
+    except Exception as e:
+        print(f"Error keeping duplicates: {e}")
+        import traceback
+        traceback.print_exc()
+        raise PreventUpdate
+
+
+@callback(
+    Output('duplicates-table-container', 'children', allow_duplicate=True),
+    Output('duplicates-count', 'children', allow_duplicate=True),
+    Input('btn-dismiss-duplicates', 'n_clicks'),
+    State('duplicates-table', 'selected_rows'),
+    State('duplicates-table', 'data'),
+    prevent_initial_call=True,
+)
+def dismiss_selected(n_clicks, selected_rows, table_data):
+    """Dismiss selected duplicates (keep original only)."""
+    if not selected_rows or len(selected_rows) == 0:
+        raise PreventUpdate
+
+    try:
+        for idx in selected_rows:
+            duplicate_id = table_data[idx]['duplicate_id']
+            db.resolve_duplicate(duplicate_id, 'dismissed')
+
+        # Reload table (same logic)
+        duplicates = db.get_potential_duplicates(include_resolved=False)
+
+        if len(duplicates) == 0:
+            return dbc.Alert("✓ No pending duplicates to review!", color="success"), html.Span(f"Pending: 0", className="text-success")
+
+        table_data = []
+        for dup in duplicates:
+            table_data.append({
+                'duplicate_id': dup.id,
+                'Date': dup.date.strftime('%Y-%m-%d'),
+                'Description': dup.description,
+                'Amount': f"£{dup.amount:,.2f}",
+                'Account': dup.account_name,
+                'Detected': dup.detected_at.strftime('%Y-%m-%d %H:%M'),
+            })
+
+        table = dash_table.DataTable(
+            id='duplicates-table',
+            columns=[
+                {'name': 'Date', 'id': 'Date'},
+                {'name': 'Description', 'id': 'Description'},
+                {'name': 'Amount', 'id': 'Amount'},
+                {'name': 'Account', 'id': 'Account'},
+                {'name': 'Detected', 'id': 'Detected'},
+            ],
+            data=table_data,
+            page_size=20,
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '10px'},
+            style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold'},
+            row_selectable='multi',
+            selected_rows=[],
+        )
+
+        buttons = dbc.Row([
+            dbc.Col([
+                dbc.Button("✓ Keep Both Selected", id="btn-keep-both", color="success", size="sm", className="me-2"),
+                dbc.Button("✗ Dismiss Selected", id="btn-dismiss-duplicates", color="danger", size="sm"),
+            ], className="mt-3 mb-3"),
+        ])
+
+        count_msg = html.Span(f"Pending: {len(duplicates)}", className="text-warning fw-bold")
+
+        return html.Div([buttons, table]), count_msg
+
+    except Exception as e:
+        print(f"Error dismissing duplicates: {e}")
+        import traceback
+        traceback.print_exc()
+        raise PreventUpdate
+
+
+@callback(
+    Output('purge-modal', 'is_open'),
+    Input('btn-purge-transactions', 'n_clicks'),
+    Input('purge-cancel', 'n_clicks'),
+    State('purge-modal', 'is_open'),
+    prevent_initial_call=True,
+)
+def toggle_purge_modal(purge_click, cancel_click, is_open):
+    """Toggle purge confirmation modal."""
+    return not is_open
+
+
+@callback(
+    Output('reapply-rules-status', 'children', allow_duplicate=True),
+    Output('purge-modal', 'is_open', allow_duplicate=True),
+    Input('purge-confirm', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def execute_purge(confirm_click):
+    """Execute purge of all transactions (preserves rules and categories)."""
+    if confirm_click is None:
+        raise PreventUpdate
+
+    try:
+        # Delete all transactions
+        count = db.delete_all_transactions()
+
+        # Close modal and show success message
+        return dbc.Alert([
+            html.H5("✓ All Transactions Purged", className="alert-heading"),
+            html.Hr(),
+            html.P([
+                f"🗑️ Deleted {count} transactions",
+                html.Br(),
+                "✓ Rules preserved",
+                html.Br(),
+                "✓ Categories preserved",
+            ]),
+            html.P([
+                html.Strong("Next step: "),
+                "Upload a new CSV file to import fresh transactions. ",
+                "Your existing rules will be automatically applied.",
+            ], className="mb-0 small"),
+        ], color="success"), False
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {str(e)}", color="danger"), False
 
 
 # ============================================================================

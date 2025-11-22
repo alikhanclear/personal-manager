@@ -28,14 +28,14 @@ If you want AI categorization for transactions that don't match rules:
 cp .env.example .env
 
 # Edit .env and add your API key
-# ANTHROPIC_API_KEY=sk-ant-your-key-here
+# APP_ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
 Get your API key from: **https://console.anthropic.com/**
 
 **Option B: Environment variable (temporary)**
 ```bash
-export ANTHROPIC_API_KEY='sk-ant-your-key-here'
+export APP_ANTHROPIC_API_KEY='sk-ant-your-key-here'
 ```
 
 **Without API key:** Rules-only mode (FREE, instant for known merchants)
@@ -116,7 +116,7 @@ Make sure your CSV is NatWest format (tab-separated). If you have a different ba
 
 ### AI Not Working
 
-1. Check API key is set: `echo $ANTHROPIC_API_KEY`
+1. Check API key is set: `echo $APP_ANTHROPIC_API_KEY`
 2. Check you have credits: https://console.anthropic.com/
 3. Check internet connection
 

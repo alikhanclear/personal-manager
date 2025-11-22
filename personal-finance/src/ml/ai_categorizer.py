@@ -26,12 +26,12 @@ class ClaudeCategorizationEngine:
 
         Args:
             categories: List of available categories
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            api_key: Anthropic API key (defaults to APP_ANTHROPIC_API_KEY env var)
             model: Claude model to use (haiku recommended for speed/cost)
         """
         self.categories = categories
         self.model = model
-        self.client = Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
+        self.client = Anthropic(api_key=api_key or os.getenv("APP_ANTHROPIC_API_KEY"))
 
         # Build category context for prompt caching
         self._category_context = self._build_category_context()

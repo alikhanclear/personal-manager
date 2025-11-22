@@ -179,8 +179,8 @@ class HybridCategorizer:
                 # No rule match - queue for AI
                 uncategorized_for_ai.append(txn)
 
-        print(f"✓ Rules matched: {stats['rule_matched']}")
-        print(f"→ Need AI categorization: {len(uncategorized_for_ai)}")
+        print(f"[OK] Rules matched: {stats['rule_matched']}")
+        print(f"-> Need AI categorization: {len(uncategorized_for_ai)}")
 
         # STEP 2: Batch AI categorization for unmatched transactions
         if use_ai_fallback and self.ai_engine and len(uncategorized_for_ai) > 0:
@@ -222,10 +222,10 @@ class HybridCategorizer:
                             },
                         })
 
-                    print(f"✓ Batch {batch_idx + 1} complete: {len(batch_txns)} transactions categorized")
+                    print(f"[OK] Batch {batch_idx + 1} complete: {len(batch_txns)} transactions categorized")
 
                 except Exception as e:
-                    print(f"❌ Batch {batch_idx + 1} failed: {e}")
+                    print(f"[ERROR] Batch {batch_idx + 1} failed: {e}")
                     # Mark all in batch as uncategorized
                     for txn in batch_txns:
                         txn.category = "Uncategorized"

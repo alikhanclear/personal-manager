@@ -27,7 +27,7 @@ count = cursor.fetchone()[0]
 print(f"\nTransactions with category but no confidence: {count}")
 
 if count == 0:
-    print("✓ Nothing to fix!")
+    print("[OK] Nothing to fix!")
     conn.close()
     exit(0)
 
@@ -53,7 +53,7 @@ cursor.execute("""
 """)
 fixed = cursor.fetchone()[0]
 
-print(f"✓ Fixed {fixed} transactions!")
+print(f"[OK] Fixed {fixed} transactions!")
 print("\n" + "=" * 80)
 print("DONE!")
 print("=" * 80)
