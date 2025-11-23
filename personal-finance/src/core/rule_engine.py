@@ -17,15 +17,15 @@ class RuleEngine:
         Initialize rule engine with list of rules.
 
         Args:
-            rules: List of Rule objects (sorted by priority, highest first)
+            rules: List of Rule objects (no sorting - checked in order)
         """
-        self.rules = sorted(rules, key=lambda r: r.priority, reverse=True)
+        self.rules = rules
 
     def match_transaction(
         self, transaction: Transaction
     ) -> Optional[Tuple[str, str, int]]:
         """
-        Try to categorize transaction using rules.
+        Try to categorize transaction using rules with whole-word token matching.
 
         Args:
             transaction: Transaction to categorize
@@ -44,37 +44,50 @@ class RuleEngine:
 
     def _matches_pattern(self, description: str, pattern: str) -> bool:
         """
-        Check if description matches pattern.
+        Check if description matches pattern using WHOLE-WORD token matching.
 
-        Supports multiple pattern types:
-        - Exact match: "NETFLIX.COM"
-        - Contains: "TESCO" (matches "TESCO STORES 1234")
-        - Regex: "^UBER.*" (starts with UBER)
+        NEW LOGIC:
+        - Tokenizes both description and pattern into words
+        - Pattern must match as complete words/tokens (not substrings)
+        - Delimiters: space, comma, asterisk, hyphen, dot, etc.
+
+        Examples:
+          Pattern "NETFLIX" matches "PAYPAL *NETFLIX" ✓ (NETFLIX is a whole word)
+          Pattern "TFL" does NOT match "NETFLIX" ✗ (TFL is inside NETFLIX)
+          Pattern "TFL" matches "TFL TRAVEL" ✓ (TFL is a whole word)
 
         Args:
             description: Transaction description (uppercase)
             pattern: Pattern to match (will be uppercased)
 
         Returns:
-            True if pattern matches, False otherwise
+            True if pattern matches as whole word, False otherwise
         """
-        pattern_upper = pattern.upper()
+        import re
 
-        # Try exact match first (fastest)
-        if description == pattern_upper:
-            return True
+        pattern_upper = pattern.upper().strip()
 
-        # Try substring match (common case)
-        if pattern_upper in description:
-            return True
+        # Tokenize description into words using common delimiters
+        # Delimiters: space, comma, asterisk, hyphen, dot, slash, etc.
+        description_tokens = re.split(r'[\s,*\-./\\|()]+', description.upper())
 
-        # Try regex match (most flexible, slowest)
-        try:
-            if re.search(pattern_upper, description):
+        # Remove empty tokens
+        description_tokens = [t for t in description_tokens if t]
+
+        # Check if pattern appears as a complete token
+        # Pattern can be multi-word (e.g., "AMAZON PRIME")
+        pattern_tokens = re.split(r'[\s,*\-./\\|()]+', pattern_upper)
+        pattern_tokens = [t for t in pattern_tokens if t]
+
+        # If single-word pattern, check if it's in description tokens
+        if len(pattern_tokens) == 1:
+            return pattern_tokens[0] in description_tokens
+
+        # If multi-word pattern, check if sequence appears in description
+        # E.g., pattern "AMAZON PRIME" should match "PAYPAL *AMAZON PRIME LTD"
+        for i in range(len(description_tokens) - len(pattern_tokens) + 1):
+            if description_tokens[i:i+len(pattern_tokens)] == pattern_tokens:
                 return True
-        except re.error:
-            # Invalid regex, skip
-            pass
 
         return False
 

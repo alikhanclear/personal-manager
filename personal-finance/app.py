@@ -133,7 +133,7 @@ def initialize_categories_and_rules():
                 budget_monthly=budget,
             )
             db.insert_category(category)
-            category_map[name] = category.name
+            category_map[name] = category.id
 
         # Add default rules
         rules = create_default_rules(category_map)
@@ -274,14 +274,14 @@ def create_layout():
                 dbc.Row([
                     dbc.Col([
                         html.H4("AI Categorization Review", className="mt-3 mb-3"),
-                        html.P("Review categorizations, correct any mistakes, and create rules for future transactions.", className="text-muted"),
 
-                        # Auto-refresh interval (every 5 seconds)
-                        dcc.Interval(
-                            id='review-refresh-interval',
-                            interval=5*1000,  # 5 seconds in milliseconds
-                            n_intervals=0
-                        ),
+                        # Clear refresh instruction
+                        dbc.Alert([
+                            html.Strong("💡 Important: "),
+                            "This table does NOT auto-refresh. After uploading transactions, applying rules, or running AI categorization, ",
+                            html.Strong("click the '🔄 Refresh' button below"),
+                            " to see the latest data. Your checkbox selections will be preserved across pages.",
+                        ], color="info", dismissable=True, className="mb-3"),
 
                         # Controls
                         dbc.Row([
@@ -296,10 +296,10 @@ def create_layout():
                                         {'label': '✓ Confirmed', 'value': 'confirmed'},
                                         {'label': '📊 All Transactions', 'value': 'all'},
                                     ],
-                                    value='rule_matched',
+                                    value='ai_suggested',
                                     clearable=False,
                                 ),
-                            ], width=5),
+                            ], width=4),
                             dbc.Col([
                                 dbc.Label("Items per page:"),
                                 dcc.Dropdown(
@@ -310,7 +310,7 @@ def create_layout():
                                         {'label': '50', 'value': 50},
                                         {'label': '100', 'value': 100},
                                     ],
-                                    value=25,
+                                    value=50,
                                     clearable=False,
                                 ),
                             ], width=2),
@@ -335,6 +335,40 @@ def create_layout():
                             ], width=3),
                         ], className="mb-4"),
 
+                        # Batch action buttons
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Selection Controls:", className="small text-muted mb-1"),
+                                dbc.Checklist(
+                                    id='toggle-select-all',
+                                    options=[{'label': ' Select All / Clear All', 'value': 'selected'}],
+                                    value=[],
+                                    switch=True,
+                                    className="mt-1",
+                                ),
+                            ], width=3),
+                            dbc.Col([
+                                html.Label("Batch Actions:", className="small text-muted mb-1"),
+                                dbc.ButtonGroup([
+                                    dbc.Button(
+                                        "✓ Confirm Selected",
+                                        id="btn-batch-confirm",
+                                        color="primary",
+                                        size="sm",
+                                    ),
+                                    dbc.Button(
+                                        "✓ Confirm & Create Rules",
+                                        id="btn-batch-confirm-rule",
+                                        color="success",
+                                        size="sm",
+                                    ),
+                                ]),
+                            ], width=5),
+                            dbc.Col([
+                                html.Span(id="batch-action-status", className="small mt-2 d-block"),
+                            ], width=4),
+                        ], className="mb-3"),
+
                         # Pagination controls
                         dbc.Row([
                             dbc.Col([
@@ -343,14 +377,65 @@ def create_layout():
                                     dbc.Button("Next →", id="btn-next-page", color="secondary", size="sm"),
                                 ]),
                                 html.Span(id="page-info", className="ms-3 text-muted small"),
-                            ], className="mb-3"),
+                            ], width=8, className="mb-3"),
+                            dbc.Col([
+                                dbc.Checklist(
+                                    id='review-case-insensitive',
+                                    options=[{'label': ' Ignore Case (Case-Insensitive)', 'value': 'ignore_case'}],
+                                    value=['ignore_case'],  # Default: case-insensitive
+                                    className="mb-1",
+                                    switch=True,
+                                ),
+                            ], width=4, className="text-end"),
                         ]),
 
-                        # Transaction review list
-                        html.Div(id='review-list-container'),
+                        # Transaction review table
+                        html.Div(id='review-table-container'),
 
                         # Store for current page number
                         dcc.Store(id='current-page', data=1),
+
+                        # Store for selected transaction IDs (preserved across pages)
+                        dcc.Store(id='selected-transaction-ids', data=[]),
+
+                        # Store for editing transaction ID
+                        dcc.Store(id='editing-transaction-id', data=None),
+
+                        # Inline dropdown for category editing (appears near clicked cell)
+                        html.Div(
+                            id='review-inline-dropdown-container',
+                            children=[
+                                html.Div([
+                                    html.Strong("Edit Category:", className="mb-2 d-block"),
+                                    html.Small("Select a category to apply:", className="text-muted d-block mb-2"),
+                                    dcc.Dropdown(
+                                        id='review-inline-category-dropdown',
+                                        clearable=False,
+                                        placeholder="Select category...",
+                                        className="mb-2",
+                                    ),
+                                    html.Div(id='review-batch-info', className="small text-info mb-2"),
+                                    html.Div([
+                                        dbc.Button("Cancel", id="review-inline-cancel-btn", color="secondary", size="sm", className="me-2"),
+                                        dbc.Button("Save", id="review-inline-save-btn", color="primary", size="sm"),
+                                    ]),
+                                ]),
+                            ],
+                            style={
+                                'position': 'fixed',
+                                'top': '200px',
+                                'left': '50%',
+                                'transform': 'translateX(-50%)',
+                                'zIndex': 9999,
+                                'width': '320px',
+                                'display': 'none',  # Hidden by default
+                                'backgroundColor': 'white',
+                                'padding': '15px',
+                                'border': '2px solid #1976d2',
+                                'borderRadius': '8px',
+                                'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+                            },
+                        ),
 
                     ], width=12),
                 ]),
@@ -446,6 +531,27 @@ def create_layout():
                                 ),
                                 dcc.Download(id="download-rules"),
                             ], width=3, className="text-end"),
+                        ]),
+
+                        # Force re-categorize option
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Checklist(
+                                    id='force-recategorize',
+                                    options=[{'label': ' Force Re-categorize (Override Confirmed Transactions)', 'value': 'force'}],
+                                    value=[],  # Default: OFF (protect confirmed)
+                                    className="mb-3",
+                                    switch=True,
+                                ),
+                            ], width=6),
+                            dbc.Col([
+                                html.Small([
+                                    "⚠️ When enabled, ",
+                                    html.Strong("ALL"),
+                                    " transactions will be re-categorized, including confirmed ones. ",
+                                    "Use this to fix mistakes or apply new rules to everything."
+                                ], className="text-warning"),
+                            ], width=6),
                         ]),
 
                         # Dangerous operations row
@@ -860,6 +966,9 @@ def display_all_rules(n_clicks, case_insensitive_value):
         categories = db.get_categories()
         category_options = [{'label': cat.name, 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
 
+        # Create UUID -> Name lookup for display
+        category_lookup = {cat.id: cat.name for cat in categories}
+
         # Debug: Print category options
         print(f"[DEBUG] Category dropdown options: {category_options}")
 
@@ -880,11 +989,14 @@ def display_all_rules(n_clicks, case_insensitive_value):
                 except:
                     created_date = "N/A"
 
+            # Convert category_id (UUID) to category name for display
+            category_name = category_lookup.get(r.category_id, r.category_id)
+
             rules_data.append({
                 'rule_id': r.id,  # Hidden column for updates/deletes
                 'Row #': idx,
                 'Pattern': r.pattern,
-                'Category': r.category_id,
+                'Category': category_name,
                 'Priority': r.priority,
                 'Created': created_date,
             })
@@ -969,7 +1081,7 @@ def display_all_rules(n_clicks, case_insensitive_value):
         content = html.Div([
             dbc.Alert([
                 html.Strong(f"Total Rules: {len(rules)}", className="me-2"),
-                html.Span(f"| Sorted by Priority (High → Low) | Filtering: {case_status}", className="text-muted small"),
+                html.Span(f"| Sorted by Priority (High -> Low) | Filtering: {case_status}", className="text-muted small"),
             ], color="light", className="mb-3"),
             table,
             dbc.Alert([
@@ -1056,18 +1168,19 @@ def save_rule_edits(current_data, previous_data):
 
 
 @callback(
-    Output('review-list-container', 'children'),
+    Output('review-table-container', 'children'),
     Output('page-info', 'children'),
     Output('btn-prev-page', 'disabled'),
     Output('btn-next-page', 'disabled'),
     Input('review-filter', 'value'),
     Input('review-page-size', 'value'),
     Input('current-page', 'data'),
-    Input('review-refresh-interval', 'n_intervals'),
     Input('btn-refresh-review', 'n_clicks'),
+    Input('review-case-insensitive', 'value'),
+    State('selected-transaction-ids', 'data'),
 )
-def update_review_list(filter_value, page_size, current_page, n_intervals, n_clicks):
-    """Update the review list of transactions."""
+def update_review_table(filter_value, page_size, current_page, n_clicks, case_insensitive_value, selected_txn_ids):
+    """Update the review table of transactions with checkboxes for batch operations."""
     # Get all transactions
     transactions = db.get_transactions()
 
@@ -1091,104 +1204,151 @@ def update_review_list(filter_value, page_size, current_page, n_intervals, n_cli
     if len(filtered) == 0:
         return dbc.Alert(f"No transactions match filter: {filter_value}", color="info"), "", True, True
 
-    # Calculate pagination
+    # Show ALL filtered transactions (no pagination - fixes search issue)
+    display_transactions = filtered
     total_transactions = len(filtered)
-    total_pages = (total_transactions + page_size - 1) // page_size  # Ceiling division
-    current_page = max(1, min(current_page, total_pages))  # Clamp to valid range
 
-    # Calculate slice indices
-    start_idx = (current_page - 1) * page_size
-    end_idx = min(start_idx + page_size, total_transactions)
-    display_transactions = filtered[start_idx:end_idx]
+    # Page info text (no pagination)
+    page_info = f"Showing all {total_transactions} transactions"
 
-    # Page info text
-    page_info = f"Page {current_page} of {total_pages} • Showing {start_idx + 1}-{end_idx} of {total_transactions} transactions"
-
-    # Button states
-    prev_disabled = (current_page <= 1)
-    next_disabled = (current_page >= total_pages)
+    # Disable pagination buttons (not used)
+    prev_disabled = True
+    next_disabled = True
 
     # Get all categories for dropdown
     categories = db.get_categories()
-    category_options = [{'label': f"{cat.icon} {cat.name}", 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
+    category_options = [{'label': cat.name, 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
 
-    # Build cards for each transaction
-    cards = []
+    # Check if case-insensitive filtering is enabled
+    case_insensitive = 'ignore_case' in (case_insensitive_value or [])
+
+    # Build table data
+    table_data = []
     for idx, txn in enumerate(display_transactions, 1):
-        # Confidence badge
-        if txn.category_confidence:
+        # Sequential row number
+        row_number = idx
+
+        # Confidence display
+        conf_display = ""
+        if txn.category_confidence is not None:
             conf_pct = int(txn.category_confidence * 100)
-            if conf_pct >= 90:
-                conf_color = "success"
-            elif conf_pct >= 70:
-                conf_color = "warning"
-            else:
-                conf_color = "danger"
-            confidence_badge = dbc.Badge(f"{conf_pct}% confidence", color=conf_color, className="ms-2")
-        else:
-            confidence_badge = None
+            conf_display = f"{conf_pct}%"
 
-        # Amount color
-        amount_color = "danger" if txn.amount < 0 else "success"
+        # Status
+        status = "✓ Confirmed" if txn.category_confirmed else ("🤖 AI" if txn.category_confidence and txn.category_confidence < 1.0 else "📋 Rule")
 
-        card = dbc.Card([
-            dbc.CardBody([
-                # Row number header
-                html.Div([
-                    dbc.Badge(f"#{idx}", color="secondary", className="mb-2"),
-                ]),
-                dbc.Row([
-                    # Left: Transaction details
-                    dbc.Col([
-                        html.H6(txn.description[:60], className="mb-2"),
-                        html.Small([
-                            html.Span(f"{txn.date.strftime('%d %b %Y')}", className="text-muted me-3"),
-                            html.Span(f"£{txn.amount:,.2f}", className=f"text-{amount_color} fw-bold me-3"),
-                            html.Span(f"{txn.account_name}", className="text-muted"),
-                        ]),
-                    ], width=12, lg=6),
+        table_data.append({
+            'transaction_id': txn.id,
+            '#': row_number,
+            'Date': txn.date.strftime('%d %b %Y'),
+            'Description': txn.description[:50] + ('...' if len(txn.description) > 50 else ''),
+            'Amount': f"£{txn.amount:,.2f}",
+            'Category': txn.category if txn.category else 'Uncategorized',
+            'Confidence': conf_display,
+            'Status': status,
+        })
 
-                    # Right: Category selection
-                    dbc.Col([
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("Category:", className="small text-muted mb-1"),
-                                dcc.Dropdown(
-                                    id={'type': 'category-dropdown', 'index': txn.id},
-                                    options=category_options,
-                                    value=txn.category,
-                                    clearable=False,
-                                    className="mb-2",
-                                ),
-                                html.Div([
-                                    html.Small(f"AI suggested: {txn.category}", className="text-muted") if txn.category else None,
-                                    confidence_badge,
-                                ]) if not txn.category_confirmed else html.Small("✓ Confirmed", className="text-success"),
-                            ], width=12),
-                        ]),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Button(
-                                    "✓ Confirm",
-                                    id={'type': 'confirm-btn', 'index': txn.id},
-                                    color="primary",
-                                    size="sm",
-                                    className="me-2",
-                                ),
-                                dbc.Button(
-                                    "✓ Confirm & Create Rule",
-                                    id={'type': 'confirm-rule-btn', 'index': txn.id},
-                                    color="success",
-                                    size="sm",
-                                ),
-                            ], width=12),
-                        ], className="mt-2"),
-                    ], width=12, lg=6),
-                ]),
-            ])
-        ], className="mb-3")
+    # Create DataFrame
+    df = pd.DataFrame(table_data)
 
-        cards.append(card)
+    # Map selected transaction IDs to current page row indices
+    selected_txn_ids = selected_txn_ids or []
+    selected_rows = []
+    for idx, row in enumerate(table_data):
+        if row['transaction_id'] in selected_txn_ids:
+            selected_rows.append(idx)
+
+    # Define columns with editability
+    # Note: filter_options={'case': 'insensitive'} is set based on toggle
+    columns = [
+        {'name': '#', 'id': '#', 'editable': False, 'type': 'numeric'},
+        {'name': 'Date', 'id': 'Date', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
+        {'name': 'Description', 'id': 'Description', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
+        {'name': 'Amount', 'id': 'Amount', 'editable': False},
+        {
+            'name': 'Category (Click to Edit)',
+            'id': 'Category',
+            'editable': False,  # Read-only, use modal to edit
+            'filter_options': {'case': 'insensitive'} if case_insensitive else {}
+        },
+        {'name': 'Confidence', 'id': 'Confidence', 'editable': False},
+        {'name': 'Status', 'id': 'Status', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
+    ]
+
+    # Create table with checkboxes
+    table = dash_table.DataTable(
+        id='review-transactions-table',
+        data=df.to_dict('records'),
+        columns=columns,
+        editable=False,  # No inline editing, use modal
+        row_selectable='multi',
+        selected_rows=selected_rows,
+        style_table={
+            'overflowX': 'auto',
+            'maxHeight': '70vh',  # 70% of viewport height for scrolling
+        },
+        style_cell={
+            'textAlign': 'left',
+            'padding': '10px',
+            'fontSize': '14px',
+            'fontFamily': 'Century Gothic, Arial, sans-serif',
+            'color': '#2F4F4F',  # Charcoal grey (dark slate grey)
+            'minWidth': '100px',
+            'overflow': 'hidden',
+            'textOverflow': 'ellipsis',
+        },
+        style_cell_conditional=[
+            {
+                'if': {'column_id': '#'},
+                'width': '200px',
+                'minWidth': '200px',
+                'maxWidth': '200px',
+            },
+        ],
+        style_header={
+            'backgroundColor': '#343a40',
+            'color': 'white',
+            'fontWeight': 'bold',
+            'fontFamily': 'Century Gothic, Arial, sans-serif',
+            'position': 'sticky',
+            'top': 0,
+            'zIndex': 10,
+        },
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': '#f8f9fa',
+            },
+            {
+                'if': {'filter_query': '{Status} = "✓ Confirmed"'},
+                'backgroundColor': '#d4edda',  # Light green for confirmed
+            },
+            {
+                'if': {'column_id': 'Category'},
+                'backgroundColor': '#e3f2fd',  # Light blue to indicate clickable
+                'cursor': 'pointer',
+                'textDecoration': 'underline',
+                'color': '#1976d2',  # Blue text
+            }
+        ],
+        page_action='none',  # Pagination handled externally
+        sort_action='native',
+        filter_action='native',
+        css=[
+            {
+                'selector': '.dash-spreadsheet-container .dash-spreadsheet-inner input[type="checkbox"]',
+                'rule': 'width: 20px !important; height: 20px !important; margin: 4px;'
+            },
+            {
+                'selector': '.dash-spreadsheet .dash-select-cell',
+                'rule': 'width: 200px !important; min-width: 200px !important; max-width: 200px !important;'
+            },
+            {
+                'selector': '.dash-spreadsheet .dash-select-header',
+                'rule': 'width: 200px !important; min-width: 200px !important; max-width: 200px !important;'
+            }
+        ],
+    )
 
     # Summary with filter description
     filter_descriptions = {
@@ -1199,14 +1359,14 @@ def update_review_list(filter_value, page_size, current_page, n_intervals, n_cli
         'all': '📊 All Transactions',
     }
 
-    summary = html.Div([
-        dbc.Alert([
-            html.Strong(f"{filter_descriptions.get(filter_value, 'Transactions')}: "),
-            f"Showing {len(display_transactions)} of {len(filtered)} total",
-        ], color="light", className="mb-3"),
-    ])
+    summary = dbc.Alert([
+        html.Strong(f"{filter_descriptions.get(filter_value, 'Transactions')}: "),
+        f"Showing {len(display_transactions)} of {len(filtered)} total",
+        html.Br(),
+        html.Small("💡 Tip: Select rows using checkboxes, then use batch action buttons above", className="text-muted"),
+    ], color="light", className="mb-3")
 
-    return [summary] + cards, page_info, prev_disabled, next_disabled
+    return html.Div([summary, table]), page_info, prev_disabled, next_disabled
 
 
 @callback(
@@ -1234,74 +1394,323 @@ def handle_pagination(prev_clicks, next_clicks, filter_value, page_size, current
 
 
 @callback(
-    Output({'type': 'confirm-btn', 'index': ALL}, 'disabled'),
-    Input({'type': 'confirm-btn', 'index': ALL}, 'n_clicks'),
-    State({'type': 'category-dropdown', 'index': ALL}, 'value'),
-    State({'type': 'confirm-btn', 'index': ALL}, 'id'),
+    Output('selected-transaction-ids', 'data'),
+    Input('review-transactions-table', 'selected_rows'),
+    State('review-transactions-table', 'data'),
+    State('selected-transaction-ids', 'data'),
     prevent_initial_call=True,
 )
-def confirm_category(n_clicks_list, category_list, id_list):
-    """Confirm category for a transaction."""
-    if not any(n_clicks_list):
+def update_selected_transaction_ids(selected_rows, table_data, current_selected_ids):
+    """Store selected transaction IDs to preserve selections across pages."""
+    if table_data is None:
         raise PreventUpdate
 
-    # Find which button was clicked
-    clicked_idx = next((i for i, n in enumerate(n_clicks_list) if n), None)
-    if clicked_idx is None:
-        raise PreventUpdate
+    # Get transaction IDs from current page
+    current_page_txn_ids = [row['transaction_id'] for row in table_data]
 
-    txn_id = id_list[clicked_idx]['index']
-    category = category_list[clicked_idx]
+    # Start with existing selections
+    all_selected_ids = set(current_selected_ids or [])
 
-    # Update transaction with confidence=1.0 (manually confirmed)
-    db.update_transaction_category(txn_id, category, confirmed=True, confidence=1.0)
-    print(f"[Review] Confirmed: {txn_id} → {category}")
+    # Remove any IDs from current page that are not selected
+    all_selected_ids -= set(current_page_txn_ids)
 
-    # Return disabled state (no changes needed, page will refresh)
-    return [False] * len(n_clicks_list)
+    # Add newly selected IDs from current page
+    if selected_rows:
+        for idx in selected_rows:
+            if idx < len(table_data):
+                all_selected_ids.add(table_data[idx]['transaction_id'])
+
+    return list(all_selected_ids)
 
 
 @callback(
-    Output({'type': 'confirm-rule-btn', 'index': ALL}, 'disabled'),
-    Input({'type': 'confirm-rule-btn', 'index': ALL}, 'n_clicks'),
-    State({'type': 'category-dropdown', 'index': ALL}, 'value'),
-    State({'type': 'confirm-rule-btn', 'index': ALL}, 'id'),
+    Output('selected-transaction-ids', 'data', allow_duplicate=True),
+    Input('toggle-select-all', 'value'),
+    State('review-transactions-table', 'data'),
     prevent_initial_call=True,
 )
-def confirm_and_create_rule(n_clicks_list, category_list, id_list):
-    """Confirm category and create a rule for future transactions."""
-    if not any(n_clicks_list):
+def handle_select_all_toggle(toggle_value, table_data):
+    """Handle Select All / Clear All toggle.
+
+    When toggle is ON (checked): Select all rows on current page
+    When toggle is OFF (unchecked): Clear all selections
+
+    NOTE: Does NOT auto-refresh the table.
+    """
+    if not table_data:
         raise PreventUpdate
 
-    # Find which button was clicked
-    clicked_idx = next((i for i, n in enumerate(n_clicks_list) if n), None)
-    if clicked_idx is None:
+    # Toggle is ON - select all on current page
+    if toggle_value and 'selected' in toggle_value:
+        # Get all transaction IDs from current page
+        current_page_txn_ids = [row['transaction_id'] for row in table_data]
+        return current_page_txn_ids
+
+    # Toggle is OFF - clear all selections
+    else:
+        return []
+
+
+@callback(
+    Output('review-inline-dropdown-container', 'style'),
+    Output('review-inline-category-dropdown', 'options'),
+    Output('review-inline-category-dropdown', 'value'),
+    Output('editing-transaction-id', 'data'),
+    Output('review-batch-info', 'children'),
+    Input('review-transactions-table', 'active_cell'),
+    State('review-transactions-table', 'data'),
+    State('selected-transaction-ids', 'data'),
+    prevent_initial_call=True,
+)
+def show_review_inline_dropdown(active_cell, table_data, selected_txn_ids):
+    """Show inline dropdown when user clicks on a Category cell."""
+    if not active_cell:
         raise PreventUpdate
 
-    txn_id = id_list[clicked_idx]['index']
-    category = category_list[clicked_idx]
-
-    # Get transaction to extract pattern
-    txn = db.get_transaction(txn_id)
-    if not txn:
+    # Check if clicked cell is in Category column
+    if active_cell['column_id'] != 'Category':
         raise PreventUpdate
 
-    # Update transaction with confidence=1.0 (manually confirmed)
-    db.update_transaction_category(txn_id, category, confirmed=True, confidence=1.0)
+    # Get the row data
+    row_idx = active_cell['row']
+    row_data = table_data[row_idx]
 
-    # Create rule from transaction description
-    categorizer = get_categorizer()
-    suggested_rule = categorizer.suggest_rule_from_transaction(txn, category)
+    # Get categories for dropdown
+    categories = db.get_categories()
+    category_options = [{'label': cat.name, 'value': cat.name} for cat in sorted(categories, key=lambda x: x.name)]
 
-    # Add rule to database
+    # Get current values
+    txn_id = row_data['transaction_id']
+    current_category = row_data['Category']
+
+    # Check if multiple rows are selected
+    selected_txn_ids = selected_txn_ids or []
+    batch_info = ""
+    if len(selected_txn_ids) > 1:
+        batch_info = f"ℹ️ Batch mode: Will update {len(selected_txn_ids)} selected transactions"
+        print(f"[Review Inline] Batch mode: {len(selected_txn_ids)} transactions selected")
+    else:
+        print(f"[Review Inline] Single mode: Transaction {txn_id}")
+
+    # Show container
+    visible_style = {
+        'position': 'fixed',
+        'top': '200px',
+        'left': '50%',
+        'transform': 'translateX(-50%)',
+        'zIndex': 9999,
+        'width': '320px',
+        'display': 'block',
+        'backgroundColor': 'white',
+        'padding': '15px',
+        'border': '2px solid #1976d2',
+        'borderRadius': '8px',
+        'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+    }
+
+    return visible_style, category_options, current_category, txn_id, batch_info
+
+
+@callback(
+    Output('review-inline-dropdown-container', 'style', allow_duplicate=True),
+    Input('review-inline-cancel-btn', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def hide_review_inline_dropdown(n_clicks):
+    """Hide dropdown when Cancel is clicked."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    hidden_style = {
+        'position': 'fixed',
+        'top': '200px',
+        'left': '50%',
+        'transform': 'translateX(-50%)',
+        'zIndex': 9999,
+        'width': '320px',
+        'display': 'none',
+        'backgroundColor': 'white',
+        'padding': '15px',
+        'border': '2px solid #1976d2',
+        'borderRadius': '8px',
+        'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+    }
+
+    return hidden_style
+
+
+@callback(
+    Output('review-inline-dropdown-container', 'style', allow_duplicate=True),
+    Output('batch-action-status', 'children', allow_duplicate=True),
+    Input('review-inline-save-btn', 'n_clicks'),
+    State('editing-transaction-id', 'data'),
+    State('review-inline-category-dropdown', 'value'),
+    State('selected-transaction-ids', 'data'),
+    prevent_initial_call=True,
+)
+def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected_txn_ids):
+    """Save category change when Save button is clicked.
+
+    If multiple rows are selected, applies to ALL selected transactions.
+    Otherwise, only applies to the clicked transaction.
+
+    NOTE: Does NOT auto-refresh the table. User must click 'Refresh' button manually.
+    """
+    if n_clicks is None or not clicked_txn_id or not new_category:
+        raise PreventUpdate
+
     try:
-        db.insert_rule(suggested_rule)
-        print(f"[Review] Confirmed + Rule created: '{suggested_rule.pattern}' → {category}")
-    except Exception as e:
-        print(f"[Review] Failed to create rule: {e}")
+        selected_txn_ids = selected_txn_ids or []
 
-    # Return disabled state (no changes needed, page will refresh)
-    return [False] * len(n_clicks_list)
+        # Check if multiple rows are selected (batch mode)
+        if len(selected_txn_ids) > 1:
+            # BATCH MODE: Apply to all selected transactions
+            print(f"[Review Inline] Batch category edit: Applying '{new_category}' to {len(selected_txn_ids)} selected transactions")
+
+            for txn_id in selected_txn_ids:
+                db.update_transaction_category(txn_id, new_category, confirmed=False, confidence=None)
+
+            print(f"[Review Inline] Updated {len(selected_txn_ids)} transactions to '{new_category}'")
+            status_msg = dbc.Badge(f"✓ Updated {len(selected_txn_ids)} transactions to '{new_category}'. Click 'Refresh' to see changes.", color="success")
+        else:
+            # SINGLE MODE: Only update the clicked transaction
+            db.update_transaction_category(clicked_txn_id, new_category, confirmed=False, confidence=None)
+            print(f"[Review Inline] Single category edit: {clicked_txn_id} -> {new_category}")
+            status_msg = dbc.Badge(f"✓ Category changed to '{new_category}'. Click 'Refresh' to see changes.", color="success")
+
+        # Flush database to ensure changes are persisted immediately
+        print(f"[Review Inline] Database update complete. User must click 'Refresh' to see changes.")
+
+        # Hide dropdown WITHOUT triggering refresh
+        # User must manually click 'Refresh' button to see changes
+        hidden_style = {
+            'position': 'fixed',
+            'top': '200px',
+            'left': '50%',
+            'transform': 'translateX(-50%)',
+            'zIndex': 9999,
+            'width': '320px',
+            'display': 'none',
+            'backgroundColor': 'white',
+            'padding': '15px',
+            'border': '2px solid #1976d2',
+            'borderRadius': '8px',
+            'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+        }
+
+        return hidden_style, status_msg
+
+    except Exception as e:
+        print(f"[Review Inline] Error saving category: {e}")
+        import traceback
+        traceback.print_exc()
+        error_msg = dbc.Badge(f"❌ Error: {str(e)}", color="danger")
+        raise PreventUpdate
+
+
+@callback(
+    Output('batch-action-status', 'children'),
+    Output('selected-transaction-ids', 'data', allow_duplicate=True),
+    Input('btn-batch-confirm', 'n_clicks'),
+    State('selected-transaction-ids', 'data'),
+    prevent_initial_call=True,
+)
+def batch_confirm(n_clicks, selected_txn_ids):
+    """Confirm selected transactions in bulk (across all pages).
+
+    NOTE: Does NOT auto-refresh. User must click 'Refresh' button to see changes.
+    """
+    if not selected_txn_ids or len(selected_txn_ids) == 0:
+        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update
+
+    try:
+        # Confirm each selected transaction by ID
+        for txn_id in selected_txn_ids:
+            txn = db.get_transaction(txn_id)
+            if txn:
+                # Update transaction with confidence=1.0 (manually confirmed)
+                db.update_transaction_category(txn_id, txn.category, confirmed=True, confidence=1.0)
+                print(f"[Batch Confirm] {txn_id} -> {txn.category}")
+
+        # Clear selections WITHOUT triggering refresh
+        return dbc.Badge(f"✓ Confirmed {len(selected_txn_ids)} transactions. Click 'Refresh' to update table.", color="success"), []
+
+    except Exception as e:
+        print(f"[Batch Confirm] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update
+
+
+@callback(
+    Output('batch-action-status', 'children', allow_duplicate=True),
+    Output('selected-transaction-ids', 'data', allow_duplicate=True),
+    Input('btn-batch-confirm-rule', 'n_clicks'),
+    State('selected-transaction-ids', 'data'),
+    prevent_initial_call=True,
+)
+def batch_confirm_and_create_rules(n_clicks, selected_txn_ids):
+    """Confirm selected transactions and create rules (one per unique pattern).
+
+    NOTE: Does NOT auto-refresh. User must click 'Refresh' button to see changes.
+    """
+    if not selected_txn_ids or len(selected_txn_ids) == 0:
+        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update
+
+    try:
+        categorizer = get_categorizer()
+
+        # Track unique patterns to avoid duplicate rule creation
+        unique_patterns = {}  # pattern -> (category, category_id)
+
+        # Step 1: Confirm all transactions and collect unique patterns
+        for txn_id in selected_txn_ids:
+            txn = db.get_transaction(txn_id)
+            if not txn:
+                continue
+
+            # Update transaction with confidence=1.0 (manually confirmed)
+            db.update_transaction_category(txn_id, txn.category, confirmed=True, confidence=1.0)
+
+            # Extract pattern from transaction
+            suggested_rule = categorizer.suggest_rule_from_transaction(txn, txn.category)
+            pattern = suggested_rule.pattern
+
+            # Store unique pattern (last one wins if multiple)
+            if pattern not in unique_patterns:
+                unique_patterns[pattern] = {
+                    'category': txn.category,
+                    'category_id': suggested_rule.category_id,
+                }
+                print(f"[Batch Confirm+Rule] Pattern '{pattern}' -> {txn.category}")
+
+        # Step 2: Create rules for unique patterns only
+        rules_created = 0
+        for pattern, info in unique_patterns.items():
+            try:
+                from src.data.models import Rule
+                rule = Rule(
+                    pattern=pattern,
+                    category_id=info['category_id'],
+                    priority=15,  # User rules have higher priority
+                )
+                db.insert_rule(rule)
+                rules_created += 1
+                print(f"[Batch Confirm+Rule] Created rule: '{pattern}' -> {info['category']}")
+            except Exception as e:
+                print(f"[Batch Confirm+Rule] Failed to create rule '{pattern}': {e}")
+
+        # Clear selections WITHOUT triggering refresh
+        return dbc.Badge(
+            f"✓ Confirmed {len(selected_txn_ids)} transactions, created {rules_created} rules. Click 'Refresh' to update table.",
+            color="success"
+        ), []
+
+    except Exception as e:
+        print(f"[Batch Confirm+Rule] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update
 
 
 @callback(
@@ -1504,55 +1913,38 @@ def export_rules_to_excel(n_clicks):
 @callback(
     Output('reapply-rules-status', 'children'),
     Input('btn-reapply-all-rules', 'n_clicks'),
+    State('force-recategorize', 'value'),
     prevent_initial_call=True,
 )
-def reapply_all_rules(n_clicks):
-    """Re-apply rules to uncategorized and rule-matched transactions (preserves AI suggestions and user confirmations)."""
+def reapply_all_rules(n_clicks, force_recategorize_value):
+    """Re-apply rules to transactions.
+
+    By default, preserves confirmed transactions.
+    If 'Force Re-categorize' is enabled, overwrites ALL transactions including confirmed ones.
+    """
     if n_clicks is None:
         raise PreventUpdate
 
     try:
+        # Check if force mode is enabled
+        force_mode = 'force' in (force_recategorize_value or [])
+
         # Get ALL transactions
         all_transactions = db.get_transactions()
 
         if len(all_transactions) == 0:
             return dbc.Alert("No transactions found.", color="info")
 
-        # Filter to ONLY:
-        # 1. Uncategorized transactions
-        # 2. Rule-matched transactions (confidence=1.0, confirmed=False) - to pick up rule updates
-        # SKIP:
-        # 1. AI suggestions (confidence<1.0) - preserve for review
-        # 2. User-confirmed transactions (confirmed=True) - user already validated
-        transactions_to_recategorize = [
-            t for t in all_transactions
-            if (
-                # Uncategorized
-                (not t.category or t.category == "Uncategorized")
-                # OR rule-matched (not confirmed)
-                or (t.category and t.category != "Uncategorized" and t.category_confidence == 1.0 and not t.category_confirmed)
-            )
-        ]
-
-        ai_suggestions_count = len([t for t in all_transactions if t.category and t.category != "Uncategorized" and t.category_confidence is not None and t.category_confidence < 1.0])
-        user_confirmed_count = len([t for t in all_transactions if t.category_confirmed])
-
-        if len(transactions_to_recategorize) == 0:
-            return dbc.Alert([
-                html.H5("ℹ️ No Work Needed", className="alert-heading"),
-                html.P("All transactions are either AI suggestions (awaiting review) or user-confirmed."),
-                html.P([
-                    f"🤖 AI suggestions preserved: {ai_suggestions_count}",
-                    html.Br(),
-                    f"✓ User-confirmed preserved: {user_confirmed_count}",
-                ], className="mb-0 small"),
-            ], color="info")
-
         # Get categorizer
         categorizer = get_categorizer()
 
-        # Categorize filtered transactions with rules ONLY (no AI)
-        results = categorizer.categorize_batch(transactions_to_recategorize, use_ai_fallback=False)
+        # Categorize transactions with rules ONLY (no AI)
+        # Pass force_mode to categorizer
+        results = categorizer.categorize_batch(
+            all_transactions,
+            use_ai_fallback=False,
+            force_recategorize=force_mode
+        )
 
         # Save results
         categorizer.save_transaction_categories(results)
@@ -1562,21 +1954,25 @@ def reapply_all_rules(n_clicks):
         rule_matched = len([t for t in all_transactions_updated if t.category and t.category != "Uncategorized" and t.category_confidence == 1.0])
         uncategorized = len([t for t in all_transactions_updated if not t.category or t.category == "Uncategorized"])
 
+        # Build status message
+        mode_msg = "🔥 FORCE MODE: Overwrote ALL transactions including confirmed ones" if force_mode else "✓ Protected confirmed transactions"
+
         return dbc.Alert([
             html.H5("✓ Re-applied Rules Successfully", className="alert-heading"),
             html.Hr(),
             html.P([
-                f"📊 Transactions processed: {len(transactions_to_recategorize)}",
+                f"📊 Total transactions: {len(all_transactions)}",
+                html.Br(),
+                f"🔄 Processed: {results['total']}",
                 html.Br(),
                 f"📋 Matched by rules: {rule_matched}",
                 html.Br(),
                 f"❓ Still uncategorized: {uncategorized}",
+                html.Br(),
+                html.Br(),
+                html.Strong(mode_msg, className="text-info" if force_mode else "text-success"),
             ]),
-            html.P([
-                html.Strong("✓ Preserved: ", className="text-success"),
-                f"{ai_suggestions_count} AI suggestions and {user_confirmed_count} user confirmations",
-            ], className="mb-0 small"),
-        ], color="success")
+        ], color="warning" if force_mode else "success")
 
     except Exception as e:
         return dbc.Alert(f"Error: {str(e)}", color="danger")
@@ -1690,7 +2086,7 @@ def save_inline_category_change(n_clicks, rule_id, new_category, table_data):
             priority=int(rule_row['Priority']),
         )
 
-        print(f"[Inline] Saved: Rule {rule_id} → Category: {new_category}")
+        print(f"[Inline] Saved: Rule {rule_id} -> Category: {new_category}")
 
         # Hide dropdown and trigger refresh
         hidden_style = {

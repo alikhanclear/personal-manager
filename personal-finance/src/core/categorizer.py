@@ -77,7 +77,12 @@ class HybridCategorizer:
 
         if rule_match:
             category_id, pattern, priority = rule_match
-            transaction.category = category_id
+
+            # Convert category_id (UUID) to category name for display
+            category_obj = next((c for c in self.categories if c.id == category_id), None)
+            category_name = category_obj.name if category_obj else "Uncategorized"
+
+            transaction.category = category_name
             transaction.category_confidence = 1.0  # Rule = 100% confidence
             transaction.category_confirmed = False  # Still needs user review
 
@@ -116,7 +121,7 @@ class HybridCategorizer:
 
     def categorize_batch(
         self, transactions: List[Transaction], use_ai_fallback: bool = True,
-        ai_batch_size: int = 30
+        ai_batch_size: int = 30, force_recategorize: bool = False
     ) -> dict:
         """
         Categorize a batch of transactions with intelligent batching.
@@ -125,6 +130,7 @@ class HybridCategorizer:
             transactions: List of transactions to categorize
             use_ai_fallback: Whether to use AI for unmatched transactions
             ai_batch_size: Number of transactions to send to AI per API call (default: 30)
+            force_recategorize: If True, recategorize ALL transactions including confirmed ones (default: False)
 
         Returns:
             Dictionary with categorization statistics
@@ -143,12 +149,13 @@ class HybridCategorizer:
         start_time = time.time()
 
         # STEP 1: Apply rules to all transactions (fast, free)
-        print(f"\n=== STEP 1: Applying rules to {len(transactions)} transactions ===")
+        mode_msg = "FORCE MODE - Including confirmed" if force_recategorize else "Normal mode - Protecting confirmed"
+        print(f"\n=== STEP 1: Applying rules to {len(transactions)} transactions ({mode_msg}) ===")
         uncategorized_for_ai = []
 
         for i, txn in enumerate(transactions, 1):
-            # Skip if already confirmed
-            if txn.category_confirmed:
+            # Skip if already confirmed (unless force mode is enabled)
+            if txn.category_confirmed and not force_recategorize:
                 stats["already_confirmed"] += 1
                 stats["results"].append({
                     "transaction": txn,
@@ -162,7 +169,12 @@ class HybridCategorizer:
 
             if rule_match:
                 category_id, pattern, priority = rule_match
-                txn.category = category_id
+
+                # Convert category_id (UUID) to category name for display
+                category_obj = next((c for c in self.categories if c.id == category_id), None)
+                category_name = category_obj.name if category_obj else "Uncategorized"
+
+                txn.category = category_name
                 txn.category_confidence = 1.0
                 txn.category_confirmed = False
                 stats["rule_matched"] += 1
@@ -307,12 +319,12 @@ class HybridCategorizer:
 
         # Find category ID
         category_obj = next((c for c in self.categories if c.name == category), None)
-        category_id = category_obj.name if category_obj else "Uncategorized"
+        category_id = category_obj.id if category_obj else "Uncategorized"
 
         return Rule(
             pattern=pattern,
             category_id=category_id,
-            priority=5,  # Default medium priority
+            priority=15,  # Higher than default rules (10) so user rules win
         )
 
     def save_transaction_categories(

@@ -9,6 +9,56 @@ A personal finance management tool for importing and categorizing bank transacti
 - **UI Framework**: Dash (Plotly) with Bootstrap components
 - **Language**: Python 3.11+
 
+---
+
+## 🔴 RULES OF ENGAGEMENT (Communication Protocol)
+
+**CRITICAL: Always Be Verbose About Changes**
+
+### 1. Before Any Destructive Operation
+- ✅ **Explain WHAT** will be deleted/modified/overwritten
+- ✅ **Explain the IMPACT** (what the user will lose)
+- ✅ **Ask for PERMISSION** before proceeding
+- ✅ **Offer alternatives** (backup, preserve data, different approach)
+
+**Example:**
+```
+"I'm about to run a script that will:
+1. DELETE ALL 83 rules from your database (including custom rules)
+2. Recreate only 62 default rules
+3. Your custom 'VIZARAT ALIKHAN → Healthcare' rule will be LOST
+
+Do you want me to:
+- A) Proceed (you'll recreate custom rules later)
+- B) Write a smarter script that preserves custom rules
+- C) Backup the database first"
+```
+
+### 2. During Implementation
+- ✅ Explain each step as you work
+- ✅ Show what's changing and why
+- ✅ Use TodoWrite to track progress
+- ✅ Don't assume the user knows what you're doing
+
+### 3. After Each Activity - ALWAYS Summarize
+- ✅ **What was changed** (which files, what code)
+- ✅ **What data was affected** (database changes, deletions)
+- ✅ **What the user needs to test/verify**
+- ✅ **Highlight any data loss or breaking changes**
+- ✅ **Document in session notes at the end**
+
+### 4. Learning Together
+- ✅ Explain the "why" behind decisions
+- ✅ Show the complete flow/logic
+- ✅ Help user understand the system, not just fix bugs
+- ✅ User should be able to make informed decisions
+
+### Examples:
+- ❌ **BAD**: "Let me run this fix script" → runs it → "Done!"
+- ✅ **GOOD**: "This script will delete X, modify Y, and impact Z. The trade-off is... Do you want me to proceed or explore alternatives?"
+
+---
+
 ## Tech Stack
 - **Frontend**: Dash + dash-bootstrap-components + dash-table
 - **Data Processing**: Polars (CSV parsing), Pandas (display)
