@@ -1,31 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip install pytest pytest-cov pytest-mock pytest-asyncio)",
-      "Bash(pytest tests/test_template.py -v)",
-      "Bash(dir /s /b src*.py)",
-      "Bash(python -m pytest tests/test_simple_verification.py -v)",
-      "WebSearch",
-      "WebFetch(domain:www.ramseysolutions.com)",
-      "WebFetch(domain:everydollar.help.ramseysolutions.com)",
-      "Bash(pip install:*)",
-      "Bash(git stash:*)",
-      "Bash(git checkout:*)",
-      "Bash(tree:*)",
-      "Bash(python app.py:*)",
-      "Bash(python:*)",
-      "Bash(taskkill:*)",
-      "Bash(nul)",
-      "Bash(git add:*)",
-      "Bash(Get-Process python -ErrorAction SilentlyContinue)",
-      "Bash(Stop-Process -Force)",
-      "Bash(powershell -Command:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nRewrite rule matching with whole-word token matching and add force re-categorize\n\nMajor changes:\n1. Rewrote rule engine to use whole-word token matching instead of substring\n   - Pattern \"TFL\" no longer matches \"NETFLIX\" (fixes false positive bug)\n   - Tokenizes descriptions by delimiters (space, comma, asterisk, dot, etc.)\n   - Pattern must match complete tokens, not substrings\n   - Supports multi-word patterns (e.g., \"AMAZON PRIME\")\n\n2. Removed priority-based sorting from rule matching logic\n   - Rules checked in database order (first match wins)\n   - Priority column still exists in database/UI (cleanup later)\n\n3. Added \"Force Re-categorize\" feature\n   - New checkbox in Rules tab to override confirmed transactions\n   - Default: protects confirmed transactions\n   - Force mode: re-categorizes ALL transactions including confirmed ones\n   - Use case: fixing mistakes, applying new rules to everything\n\n4. Removed auto-refresh from Review & Correct tab\n   - Category edits no longer auto-refresh the table\n   - User must click \"Refresh\" button manually to see changes\n   - Prevents losing scroll position during batch edits\n   - Added success messages after save\n\n5. Added debug scripts for testing and troubleshooting\n   - scripts/test_token_matching.py - Test whole-word matching logic\n   - scripts/debug_netflix.py - Debug Netflix categorization issues\n   - scripts/debug_all_rules.py - Show all rules and test matching\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)"
-    ],
+    "deny": [],
     "ask": []
   }
 }

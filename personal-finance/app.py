@@ -493,44 +493,18 @@ def create_layout():
                         html.H4("Categorization Rules", className="mt-3 mb-3"),
                         html.P("Click a Category cell to edit with dropdown. Pattern and Priority are editable inline.", className="text-muted"),
 
+                        # Button row - all aligned
                         dbc.Row([
                             dbc.Col([
-                                dbc.Button(
-                                    "🔄 Refresh Rules",
-                                    id="btn-refresh-rules",
-                                    color="secondary",
-                                    size="sm",
-                                    className="mb-3",
-                                ),
-                            ], width=2),
-                            dbc.Col([
-                                dbc.Button(
-                                    "🔁 Re-categorize ALL with Rules",
-                                    id="btn-reapply-all-rules",
-                                    color="warning",
-                                    size="sm",
-                                    className="mb-3",
-                                ),
-                            ], width=3),
-                            dbc.Col([
-                                dbc.Checklist(
-                                    id='rules-case-insensitive',
-                                    options=[{'label': ' Ignore Case (Case-Insensitive)', 'value': 'ignore_case'}],
-                                    value=['ignore_case'],  # Default: case-insensitive
-                                    className="mb-3",
-                                    switch=True,
-                                ),
-                            ], width=4),
-                            dbc.Col([
-                                dbc.Button(
-                                    "📥 Export Rules to Excel",
-                                    id="btn-export-rules",
-                                    color="success",
-                                    size="sm",
-                                    className="mb-3",
-                                ),
+                                dbc.ButtonGroup([
+                                    dbc.Button("➕ Add New Rule", id="btn-add-rule", color="success", size="sm"),
+                                    dbc.Button("🔄 Refresh", id="btn-refresh-rules", color="secondary", size="sm"),
+                                    dbc.Button("🗑️ Delete Selected", id="btn-delete-selected-rules", color="danger", size="sm"),
+                                    dbc.Button("🔁 Re-categorize ALL", id="btn-reapply-all-rules", color="warning", size="sm"),
+                                    dbc.Button("📥 Export to Excel", id="btn-export-rules", color="info", size="sm"),
+                                ], className="mb-3"),
                                 dcc.Download(id="download-rules"),
-                            ], width=3, className="text-end"),
+                            ], width=12),
                         ]),
 
                         # Force re-categorize option
@@ -553,6 +527,23 @@ def create_layout():
                                 ], className="text-warning"),
                             ], width=6),
                         ]),
+
+                        # Modal for adding new rule
+                        dbc.Modal([
+                            dbc.ModalHeader(dbc.ModalTitle("Add New Rule")),
+                            dbc.ModalBody([
+                                dbc.Label("Pattern (text to match in description)"),
+                                dbc.Input(id="new-rule-pattern", placeholder="e.g., NETFLIX, TESCO, TFL", className="mb-3"),
+                                dbc.Label("Category"),
+                                dcc.Dropdown(id="new-rule-category", placeholder="Select category...", className="mb-3"),
+                                dbc.Label("Priority (optional, default: 10)"),
+                                dbc.Input(id="new-rule-priority", type="number", value=10, className="mb-3"),
+                            ]),
+                            dbc.ModalFooter([
+                                dbc.Button("Cancel", id="btn-cancel-add-rule", color="secondary", size="sm"),
+                                dbc.Button("Add Rule", id="btn-save-new-rule", color="success", size="sm"),
+                            ]),
+                        ], id="modal-add-rule", is_open=False),
 
                         # Dangerous operations row
                         dbc.Row([
@@ -951,11 +942,12 @@ def run_ai_categorization(n_clicks):
 @callback(
     Output('all-rules-list', 'children'),
     Input('btn-refresh-rules', 'n_clicks'),  # Manual refresh only
-    Input('rules-case-insensitive', 'value'),  # Case sensitivity toggle
 )
-def display_all_rules(n_clicks, case_insensitive_value):
+def display_all_rules(n_clicks):
     """Display all categorization rules in a scrollable list with Excel-like filtering."""
     try:
+        # Default to case-insensitive filtering
+        case_sensitive = False
         # Load rules from database
         rules = db.get_rules()
 
@@ -1003,9 +995,6 @@ def display_all_rules(n_clicks, case_insensitive_value):
 
         rules_df = pd.DataFrame(rules_data)
 
-        # Determine case sensitivity from checkbox
-        case_sensitive = ('ignore_case' not in case_insensitive_value)
-
         # Define columns with editability
         # Note: rule_id is in the data but not in columns (hidden from user)
         # Category is read-only - click to open modal with dropdown
@@ -1028,6 +1017,8 @@ def display_all_rules(n_clicks, case_insensitive_value):
             columns=columns,
             editable=True,  # Make table editable (except Category)
             row_deletable=True,  # Add delete button for each row
+            row_selectable='multi',  # Enable checkboxes for multi-select
+            selected_rows=[],  # Start with no rows selected
             style_table={
                 'overflowX': 'auto',
                 # Removed overflowY to prevent clipping dropdown menus
@@ -1976,6 +1967,131 @@ def reapply_all_rules(n_clicks, force_recategorize_value):
 
     except Exception as e:
         return dbc.Alert(f"Error: {str(e)}", color="danger")
+
+
+@callback(
+    Output('reapply-rules-status', 'children', allow_duplicate=True),
+    Output('btn-refresh-rules', 'n_clicks', allow_duplicate=True),
+    Input('btn-delete-selected-rules', 'n_clicks'),
+    State('rules-table', 'data'),
+    State('rules-table', 'selected_rows'),
+    prevent_initial_call=True,
+)
+def delete_selected_rules(n_clicks, table_data, selected_rows):
+    """Delete selected rules from the database."""
+    if n_clicks is None or not selected_rows or not table_data:
+        raise PreventUpdate
+
+    try:
+        # Get the Rule IDs of selected rows
+        selected_rule_ids = [table_data[i]['Rule ID'] for i in selected_rows]
+
+        print(f"[Delete Rules] Deleting {len(selected_rule_ids)} selected rules...")
+
+        # Delete each rule from database
+        import sqlite3
+        DB_PATH = Path(__file__).parent / "data" / "finance.db"
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        for rule_id in selected_rule_ids:
+            cursor.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
+            print(f"[Delete Rules] Deleted rule: {rule_id}")
+
+        conn.commit()
+        conn.close()
+
+        print(f"[Delete Rules] Successfully deleted {len(selected_rule_ids)} rules")
+
+        # Trigger table refresh by incrementing refresh button clicks
+        return dbc.Alert([
+            html.H5(f"✓ Deleted {len(selected_rule_ids)} Rules", className="alert-heading"),
+            html.P("The selected rules have been permanently deleted from the database."),
+        ], color="success"), 1
+
+    except Exception as e:
+        print(f"[Delete Rules] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Error deleting rules: {str(e)}", color="danger"), dash.no_update
+
+
+@callback(
+    Output('modal-add-rule', 'is_open'),
+    Output('new-rule-category', 'options'),
+    Input('btn-add-rule', 'n_clicks'),
+    Input('btn-cancel-add-rule', 'n_clicks'),
+    Input('btn-save-new-rule', 'n_clicks'),
+    State('modal-add-rule', 'is_open'),
+    prevent_initial_call=True,
+)
+def toggle_add_rule_modal(btn_add, btn_cancel, btn_save, is_open):
+    """Open/close the Add New Rule modal and populate category dropdown."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # Get categories for dropdown
+    categories = db.get_categories()
+    category_options = [{'label': cat.name, 'value': cat.id} for cat in categories]
+
+    if button_id == 'btn-add-rule':
+        return True, category_options  # Open modal
+    else:
+        return False, category_options  # Close modal
+
+
+@callback(
+    Output('reapply-rules-status', 'children', allow_duplicate=True),
+    Output('btn-refresh-rules', 'n_clicks', allow_duplicate=True),
+    Output('new-rule-pattern', 'value'),
+    Output('new-rule-category', 'value'),
+    Output('new-rule-priority', 'value'),
+    Input('btn-save-new-rule', 'n_clicks'),
+    State('new-rule-pattern', 'value'),
+    State('new-rule-category', 'value'),
+    State('new-rule-priority', 'value'),
+    prevent_initial_call=True,
+)
+def save_new_rule(n_clicks, pattern, category_id, priority):
+    """Save a new rule to the database."""
+    if n_clicks is None:
+        raise PreventUpdate
+
+    try:
+        # Validation
+        if not pattern or not pattern.strip():
+            return dbc.Alert("Error: Pattern cannot be empty", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not category_id:
+            return dbc.Alert("Error: Please select a category", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Create new rule
+        from src.data.models import Rule
+        new_rule = Rule(
+            pattern=pattern.strip(),
+            category_id=category_id,
+            priority=priority if priority else 10,
+        )
+
+        # Save to database
+        db.insert_rule(new_rule)
+
+        print(f"[Add Rule] Created new rule: '{pattern}' -> {category_id} (Priority: {priority})")
+
+        # Clear form and refresh table
+        return dbc.Alert([
+            html.H5("✓ Rule Created", className="alert-heading"),
+            html.P(f"Pattern: '{pattern}' successfully added to rules."),
+        ], color="success"), 1, "", None, 10  # Reset form
+
+    except Exception as e:
+        print(f"[Add Rule] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Error creating rule: {str(e)}", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 
 @callback(

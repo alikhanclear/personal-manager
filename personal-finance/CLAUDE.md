@@ -407,87 +407,180 @@ Rules are created automatically when you click "Confirm & Create Rule" in the Re
 
 ---
 
-**Last Updated**: November 22, 2025
-**Current Session**: Duplicate detection system + batch operations planning
+**Last Updated**: November 23, 2025
+**Current Session**: Rule engine rewrite + token-based matching
 **Current Branch**: `personal-finance/dash-no-aggrid`
 
-## ✅ Completed Today (Nov 22, 2025)
+## ✅ Completed Sessions
 
-### 1. Fixed "Re-categorize ALL with Rules" Button
-- **OLD**: Overwrote ALL categorizations including AI suggestions
-- **NEW**: Only processes uncategorized + rule-matched transactions
-- **Preserves**: AI suggestions (confidence<1.0) and user confirmations
+### Session: Nov 23, 2025 - Rule Engine Rewrite
 
-### 2. Added "Purge All Transactions" Feature
-- New button in Rules tab with confirmation modal
-- Deletes ALL transactions, preserves rules and categories
-- Use case: Start fresh with new CSV while keeping learned rules
+**Major Changes:**
 
-### 3. Implemented Duplicate Detection & Review System
-**Problem Solved**: MD5 hash-based IDs were silently skipping duplicates
-- Same transaction twice in one day (e.g., 2 coffees) was being lost
+1. **Removed All Auto-Refresh Behavior**
+   - Review & Correct tab no longer auto-refreshes after category changes
+   - User has complete manual control via "Refresh" button
+   - Added success messages: "✓ Category changed to 'X'. Click 'Refresh' to see changes."
+   - **Files**: `app.py` (callbacks: `save_review_category_change`, `batch_confirm`, etc.)
 
-**New System**:
-- Database table: `potential_duplicates`
-- New tab: "🔍 Review Duplicates"
-- Upload message shows: "⚠️ Potential duplicates: X"
-- User actions: "Keep Both" or "Dismiss"
+2. **Rewrote Rule Matching Engine (Whole-Word Token Matching)**
+   - **Problem**: Pattern "TFL" was matching "NETFLIX" (substring match)
+   - **Solution**: Token-based matching using `re.split(r'[\s,*\-./\\|()]+', ...)`
+   - Pattern must match complete tokens, not substrings
+   - Examples:
+     - "NETFLIX" matches "PAYPAL *NETFLIX" ✓
+     - "TFL" does NOT match "NETFLIX" ✗
+     - "TFL" matches "TFL TRAVEL" ✓
+   - **Files**: `src/core/rule_engine.py` (complete rewrite of `_matches_pattern()`)
 
-**Files Changed**:
-- `src/data/models.py` - Added PotentialDuplicate model
-- `src/data/database.py` - Added duplicates table + methods
-- `app.py` - New tab + callbacks for duplicate review
+3. **Added "Force Re-categorize" Feature**
+   - New checkbox in Rules tab
+   - **Default OFF**: Protects confirmed transactions
+   - **Enabled**: Re-categorizes ALL transactions including confirmed ones
+   - Use case: Fix mistakes, apply new rules to everything
+   - **Files**: `app.py` (UI + callback), `src/core/categorizer.py` (`force_recategorize` parameter)
 
-## 🔴 PRIORITIES FOR TOMORROW (Nov 23, 2025)
+4. **Implemented Bulk Rule Deletion**
+   - Added checkboxes to Rules table (`row_selectable='multi'`)
+   - New button: "🗑️ Delete Selected Rules"
+   - Deletes rules permanently from database
+   - **Files**: `app.py` (callback: `delete_selected_rules`)
 
-### Priority 1: Batch Operations in Review & Correct Tab
-**Problem**: User must confirm/create rules one transaction at a time
-**Solution Needed**:
+5. **Added "Add New Rule" Feature**
+   - New button: "➕ Add New Rule"
+   - Modal dialog with form: Pattern, Category dropdown, Priority
+   - **Files**: `app.py` (modal UI + callbacks: `toggle_add_rule_modal`, `save_new_rule`)
+
+6. **Aligned All Buttons in Rules Tab**
+   - Used `dbc.ButtonGroup` for clean layout
+   - Buttons: Add New Rule, Refresh, Delete Selected, Re-categorize ALL, Export to Excel
+   - **Files**: `app.py` (line ~496-508)
+
+7. **Fixed Broken Netflix Rule**
+   - **Problem**: category_id stored as "Streaming Services" (name) instead of UUID
+   - **Fix**: Updated database to use proper UUID
+   - Created debug scripts: `check_all_rules.py`, `fix_netflix_quick.py`
+   - **Result**: All 12 Netflix transactions now correctly categorized
+
+8. **Fixed `case_insensitive_value` Error**
+   - Removed reference to deleted UI component
+   - Hardcoded default: case-insensitive filtering
+   - **Files**: `app.py` (line 950, line 999)
+
+**Key Lesson Learned:**
+- ✅ **Categorization should be driven from Rules tab with force re-categorize**
+- ❌ Doing it transaction-by-transaction in Review & Correct tab is inefficient
+- **Best workflow**: Fix rules → Force re-categorize ALL → Review outliers
+
+**Debug Scripts Created:**
+- `scripts/debug_netflix.py` - Check Netflix transactions
+- `scripts/debug_all_rules.py` - Show all rules and test matching
+- `scripts/test_token_matching.py` - Test whole-word matching (13/13 tests passed)
+- `scripts/check_all_rules.py` - Check for broken category_ids
+- `scripts/fix_netflix_quick.py` - Fix broken Netflix rule
+
+---
+
+### Session: Nov 22, 2025 - Duplicate Detection System
+
+**Completed:**
+
+1. **Fixed "Re-categorize ALL with Rules" Button**
+   - **OLD**: Overwrote ALL categorizations including AI suggestions
+   - **NEW**: Only processes uncategorized + rule-matched transactions
+   - **Preserves**: AI suggestions (confidence<1.0) and user confirmations
+
+2. **Added "Purge All Transactions" Feature**
+   - New button in Rules tab with confirmation modal
+   - Deletes ALL transactions, preserves rules and categories
+   - Use case: Start fresh with new CSV while keeping learned rules
+
+3. **Implemented Duplicate Detection & Review System**
+   - **Problem Solved**: MD5 hash-based IDs were silently skipping duplicates
+   - Same transaction twice in one day (e.g., 2 coffees) was being lost
+   - **New System**:
+     - Database table: `potential_duplicates`
+     - New tab: "🔍 Review Duplicates"
+     - Upload message shows: "⚠️ Potential duplicates: X"
+     - User actions: "Keep Both" or "Dismiss"
+   - **Files Changed**:
+     - `src/data/models.py` - Added PotentialDuplicate model
+     - `src/data/database.py` - Added duplicates table + methods
+     - `app.py` - New tab + callbacks for duplicate review
+
+---
+
+## 🔴 PRIORITY FOR NEXT SESSION (Nov 24, 2025)
+
+### Excel/CSV Import for Rules (Bulk Rule Management)
+
+**Problem**:
+- Currently, rules can only be added one-by-one via UI modal
+- No way to bulk upload or manage large rule sets
+- Difficult to maintain rules in version control or share with others
+
+**Solution**: Add Excel/CSV import functionality in Rules tab
+
+**Two Import Modes:**
+
+1. **Mode 1: Overwrite All Rules (Replace)**
+   - Deletes ALL existing rules from database
+   - Imports new rules from CSV/Excel file
+   - Use case: Complete rule set replacement, reset to clean state
+   - **Warning required**: "This will DELETE all X existing rules. Continue?"
+
+2. **Mode 2: Incremental/Batch Add (Append)**
+   - Keeps existing rules in database
+   - Adds new rules from CSV/Excel file
+   - Handles duplicates: Skip if pattern + category already exists
+   - Use case: Adding new rules without losing existing ones
+
+**CSV/Excel Format:**
+```csv
+pattern,category,priority
+NETFLIX,Streaming Services,10
+TFL,Public Transport,10
+TESCO,Groceries,10
+AMAZON,Shopping,5
+```
+
+**Implementation Notes:**
+- Add "📥 Import Rules" button in Rules tab ButtonGroup
+- Modal dialog with:
+  - File upload (CSV or Excel)
+  - Radio buttons: "Replace All Rules" or "Add New Rules"
+  - Preview table showing parsed rules
+  - Validation: Check category names exist, valid priority values
+- Use Polars to parse CSV/Excel (fast, robust)
+- Map category names to UUIDs before insert
+- Show summary: "✓ Imported X rules (Y skipped as duplicates)"
+
+**Files to Modify:**
+- `app.py` - Add upload UI, callbacks for import
+- `src/data/database.py` - Add `import_rules()` and `replace_all_rules()` methods
+
+**Benefits:**
+- Backup/restore rule sets easily
+- Share rules across environments (dev/prod)
+- Version control rules in Git (CSV file)
+- Bulk edit in Excel, re-import
+- Faster onboarding (import pre-configured rules)
+
+---
+
+## 📋 Future Enhancements (Backlog)
+
+### Batch Operations in Review & Correct Tab
 - Add checkbox column to transactions table
-- Select multiple transactions
-- Batch actions:
-  - "Confirm Selected" (mark all as confirmed)
-  - "Confirm & Create Rules Selected" (create rule for each selected)
+- Batch actions: "Confirm Selected", "Confirm & Create Rules Selected"
 - UX: Similar to email clients (Gmail/Outlook style)
 
-**Implementation Notes**:
-- Dash DataTable supports `row_selectable='multi'`
-- Add bulk action buttons above table
-- Process selected rows in loop
-- Show success message: "Confirmed X transactions, created Y rules"
+### Rule Conflict Detection & Resolution
+- Detect when multiple rules match the same transaction
+- Show warnings when rules overlap (non-blocking)
+- Rule priority strictly enforced (first match wins)
 
-### Priority 2: Rule Conflict Detection & Resolution
-**Questions to Answer**:
-1. **Can multiple rules match the same transaction?**
-   - Test: Create 2 rules with overlapping patterns (e.g., "TESCO" and "TESCO EXPRESS")
-   - Current behavior: First matching rule wins (priority-based)
-   - Is this correct? Or should we detect conflicts?
-
-2. **What happens when user creates a rule for a transaction that already has a rule match?**
-   - Scenario: Transaction matched by Rule A, user creates Rule B for same pattern
-   - Should we: Warn user? Deactivate old rule? Allow duplicates?
-
-3. **Priority handling**:
-   - Are priorities working correctly? (higher priority = checked first)
-   - Should we show rule conflicts in UI?
-
-**Testing Plan**:
-```
-1. Import transactions with "TESCO CLUBCARD"
-2. Create Rule 1: Pattern "TESCO" → Category "Groceries"
-3. Create Rule 2: Pattern "CLUBCARD" → Category "Shopping"
-4. Re-categorize ALL with rules
-5. Check which rule wins
-6. Document expected behavior
-```
-
-**Possible Solutions**:
-- Option A: Show warnings when rules overlap (non-blocking)
-- Option B: Rule priority strictly enforced (first match wins)
-- Option C: Show all matching rules, let user choose
-- **Decision needed**: Which approach fits workflow best?
-
-## Next Steps After Priorities
+### Other Priorities
 - Budget tracking and weekly reports implementation
 - Performance optimization for large datasets
 - Export enhancements
