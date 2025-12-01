@@ -684,6 +684,84 @@ AMAZON,Shopping,5
 
 ---
 
+## 🚨 Session: Dec 1, 2025 - Rule Recovery & Backup Protection System
+
+**Status**: ✅ CRITICAL RECOVERY COMPLETED
+
+**Crisis**: Database accidentally deleted, 260 custom rules lost (322 → 62 default rules)
+
+**Root Cause**:
+- User deleted `data/finance.db` during cleanup
+- App auto-created fresh database with only 62 default rules from `create_default_rules()`
+- Rules exist ONLY in database (not in git, code, or config files)
+- Lost 260 custom rules (80% of total rules!)
+
+**Recovery Process**:
+1. ✅ Found backup export from Nov 29: `rules_20251129_105930.xlsx` (322 rules)
+2. ✅ Created restoration script: `scripts/restore_rules_from_export.py`
+3. ✅ Auto-created 13 missing categories (Airlines, Clearthread, Debt repayment, etc.)
+4. ✅ Successfully restored all 322 rules
+5. ✅ Database verified: 324 rules (322 restored + 2 new), 68 categories
+
+**Backup Protection System Implemented**:
+Created `src/utils/backup.py` with **4 layers of protection**:
+
+1. **Auto Backups** (`backups/` folder)
+   - Timestamped Excel files
+   - Keeps last 10 backups
+   - Created automatically on rule changes
+
+2. **Git-Tracked Master** (`rules_master.csv`)
+   - CSV format for easy diffs
+   - Committed to version control
+   - Sorted by priority and pattern
+
+3. **Manual Exports** (Downloads folder)
+   - User-initiated exports via UI
+   - Timestamped with metadata
+
+4. **Database Snapshots**
+   - Full database backups before destructive operations
+
+**Key Functions Added**:
+```python
+create_rules_backup(db, description)  # Auto backup with cleanup
+create_master_rules_file(db)          # Git-tracked CSV
+export_rules_to_downloads(db)         # Manual export
+cleanup_old_backups()                 # Keep last 10
+```
+
+**Files Created/Modified**:
+- ✅ `src/utils/backup.py` - NEW (backup system)
+- ✅ `scripts/restore_rules_from_export.py` - NEW (recovery script)
+- ✅ `rules_master.csv` - NEW (git-tracked master backup - 322 rules)
+- ✅ `backups/rules_post_restore_20251201_191430.xlsx` - Initial backup
+
+**Errors Fixed During Development**:
+1. UnicodeEncodeError - Replaced emoji in print statements with ASCII
+2. AttributeError (engine) - Used `db._get_connection()` context manager
+3. AttributeError (_generate_uuid) - Imported `uuid4()` directly
+
+**Lessons Learned**:
+- ⚠️ **Rules are database-only** - No fallback in code/git before this session
+- ⚠️ **SQLite deletion is permanent** - No recycle bin for database files
+- ✅ **Multiple backup layers essential** - Git-tracked + auto-backups + manual exports
+- ✅ **Backup verification critical** - Always verify restoration works
+
+**Current Database State**:
+- **Rules**: 324 (fully protected with 4-layer backup system)
+- **Categories**: 68 (55 original + 13 custom)
+- **Transactions**: 0 (need to re-import NatWest CSVs)
+
+**Budget Tracking Implementation**: Paused (plan exists in `optimized-purring-parasol.md`)
+
+**Next Steps**:
+1. Re-import transaction CSV files (when user ready)
+2. Test backup system during rule additions/deletions
+3. Resume budget tracking implementation (when prioritized)
+
+---
+
 **Git Repository**: Private repo `personal-finance-fresh`
 **Database**: `data/finance.db` (SQLite)
 **Server**: http://localhost:8050/
