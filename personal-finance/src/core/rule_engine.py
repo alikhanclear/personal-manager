@@ -42,22 +42,66 @@ class RuleEngine:
 
         return None
 
+    def _split_alphanumeric_smart(self, tokens: List[str]) -> List[str]:
+        """
+        Split tokens on alphanumeric boundaries with smart threshold.
+
+        Only splits if there are 4+ consecutive letters before a number.
+        This preserves short codes like O2, F1, U22 while splitting tracking numbers.
+
+        Args:
+            tokens: List of tokens to process
+
+        Returns:
+            List of tokens with smart alphanumeric splitting applied
+
+        Examples:
+            ['FEDEX395224543'] → ['FEDEX', '395224543'] (5 letters, split)
+            ['BOLT123'] → ['BOLT', '123'] (4 letters, split)
+            ['AMAZON123'] → ['AMAZON', '123'] (6 letters, split)
+            ['O2'] → ['O2'] (1 letter, preserved)
+            ['F1'] → ['F1'] (1 letter, preserved)
+            ['U22'] → ['U22'] (1 letter, preserved)
+            ['EUO2511021744'] → ['EUO', '2511021744'] (3 letters, split)
+        """
+        import re
+
+        result = []
+        for token in tokens:
+            # Match: 4+ letters followed by digits
+            # Example: FEDEX395224543 → groups: ('FEDEX', '395224543')
+            match = re.match(r'^([A-Z]{4,})(\d+.*)$', token)
+
+            if match:
+                # Split: 4+ letters before numbers
+                result.extend([match.group(1), match.group(2)])
+            else:
+                # Keep as-is: short codes (O2, F1, U22) or no numbers
+                result.append(token)
+
+        return result
+
     def _matches_pattern(self, description: str, pattern: str) -> bool:
         """
         Check if description matches pattern using WHOLE-WORD token matching.
 
-        NEW LOGIC (Dec 1, 2025 - Added dot as delimiter):
+        NEW LOGIC (Dec 1, 2025 - Added smart alphanumeric splitting):
         - Tokenizes both description and pattern into words
         - Pattern must match as complete words/tokens (not substrings)
         - Delimiters: space, asterisk (*), and dot (.)
+        - Smart alphanumeric splitting: 4+ letters before number → split
         - Strips trailing punctuation from description tokens when comparing
         - Preserves: hyphens, slashes in middle of words (e.g., "CO-OP", "COM/BILL")
+        - Preserves: short codes (O2, F1, U22) without splitting
 
         Examples:
           Pattern "NETFLIX" matches "PAYPAL *NETFLIX.COM" ✓ (NETFLIX is a token after dot split)
           Pattern "TFL" does NOT match "NETFLIX" ✗ (TFL is inside NETFLIX)
           Pattern "TFL" matches "TFL TRAVEL" ✓ (TFL is a whole word)
           Pattern "BOLT" matches "BOLT.EUO2511021744" ✓ (dot is now a delimiter)
+          Pattern "FEDEX" matches "FEDEX395224543" ✓ (4+ letters, alphanumeric split)
+          Pattern "O2" matches "O2 MOBILE" ✓ (short code preserved)
+          Pattern "F1" matches "F1 GRAND PRIX" ✓ (short code preserved)
           Pattern "CO-OP" matches "CO-OP FOOD" ✓ (hyphen preserved)
           Pattern "APPLE" matches "APPLE.COM/BILL" ✓ (dot splits tokens)
           Pattern "CLEARTHREAD STARLI" matches "CLEARTHREAD STARLI, INITIAL PAYMENT" ✓ (comma ignored)
@@ -94,10 +138,24 @@ class RuleEngine:
         # This fixes: "FOA PEACE IN , PALESTINE" where commas become empty strings
         description_tokens_normalized = [t for t in description_tokens_normalized if t]
 
+        # Smart alphanumeric boundary splitting
+        # Split tokens on letter-to-number transitions IF 4+ letters before number
+        # Examples:
+        #   FEDEX395224543 (5 letters) → ['FEDEX', '395224543']
+        #   BOLT123 (4 letters) → ['BOLT', '123']
+        #   O2 (1 letter) → ['O2'] (preserved)
+        #   F1 (1 letter) → ['F1'] (preserved)
+        #   U22 (1 letter) → ['U22'] (preserved)
+        description_tokens_normalized = self._split_alphanumeric_smart(description_tokens_normalized)
+
         # Check if pattern appears as a complete token
         # Pattern can be multi-word (e.g., "AMAZON PRIME")
         pattern_tokens = re.split(r'[\s*\.]+', pattern_upper)
         pattern_tokens = [t for t in pattern_tokens if t]
+
+        # Apply same smart alphanumeric splitting to pattern tokens
+        # This ensures patterns like "HIJAZIALAA67" match "HIJAZIALAA67 PAYMENT"
+        pattern_tokens = self._split_alphanumeric_smart(pattern_tokens)
 
         # If single-word pattern, check if it's in description tokens
         if len(pattern_tokens) == 1:
