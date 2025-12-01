@@ -10,6 +10,7 @@ from ..data.database import FinanceDatabase
 from ..data.models import Category, Rule, Transaction
 from ..ml.ai_categorizer import ClaudeCategorizationEngine
 from .rule_engine import RuleEngine
+from ..utils.progress_tracker import ProgressTracker
 
 
 class HybridCategorizer:
@@ -72,6 +73,36 @@ class HybridCategorizer:
         if transaction.category_confirmed:
             return transaction, "already_confirmed", {}
 
+        # Step 0: Check transaction type (HIGHEST PRIORITY)
+        if hasattr(transaction, 'transaction_type') and transaction.transaction_type:
+            txn_type = transaction.transaction_type.upper().strip()
+
+            # C/L → Cash
+            if txn_type == 'C/L':
+                transaction.category = "Cash"
+                transaction.category_confidence = 1.0
+                transaction.category_confirmed = False
+
+                metadata = {
+                    "transaction_type": txn_type,
+                    "cost_usd": 0.0,
+                }
+
+                return transaction, "transaction_type", metadata
+
+            # INT/CHG → Interest and Charges
+            elif txn_type in ['INT', 'CHG']:
+                transaction.category = "Interest and Charges"
+                transaction.category_confidence = 1.0
+                transaction.category_confirmed = False
+
+                metadata = {
+                    "transaction_type": txn_type,
+                    "cost_usd": 0.0,
+                }
+
+                return transaction, "transaction_type", metadata
+
         # Step 1: Try rule matching (FREE)
         rule_match = self.rule_engine.match_transaction(transaction)
 
@@ -121,7 +152,8 @@ class HybridCategorizer:
 
     def categorize_batch(
         self, transactions: List[Transaction], use_ai_fallback: bool = True,
-        ai_batch_size: int = 30, force_recategorize: bool = False
+        ai_batch_size: int = 30, force_recategorize: bool = False,
+        progress_tracker: Optional[ProgressTracker] = None
     ) -> dict:
         """
         Categorize a batch of transactions with intelligent batching.
@@ -131,12 +163,14 @@ class HybridCategorizer:
             use_ai_fallback: Whether to use AI for unmatched transactions
             ai_batch_size: Number of transactions to send to AI per API call (default: 30)
             force_recategorize: If True, recategorize ALL transactions including confirmed ones (default: False)
+            progress_tracker: Optional progress tracker for live updates
 
         Returns:
             Dictionary with categorization statistics
         """
         stats = {
             "total": len(transactions),
+            "transaction_type_matched": 0,
             "rule_matched": 0,
             "ai_categorized": 0,
             "uncategorized": 0,
@@ -147,6 +181,13 @@ class HybridCategorizer:
 
         import time
         start_time = time.time()
+
+        # Initialize progress tracker
+        if progress_tracker:
+            progress_tracker.start("Categorization", len(transactions))
+
+        # STEP 0: Check transaction types (INT/CHG → Interest and Charges)
+        print(f"\n=== STEP 0: Checking transaction types (INT/CHG) ===")
 
         # STEP 1: Apply rules to all transactions (fast, free)
         mode_msg = "FORCE MODE - Including confirmed" if force_recategorize else "Normal mode - Protecting confirmed"
@@ -163,6 +204,34 @@ class HybridCategorizer:
                     "metadata": {},
                 })
                 continue
+
+            # Skip if already categorized by rules or transaction type (confidence=1.0, unless force mode)
+            if not force_recategorize and txn.category_confidence and txn.category_confidence >= 1.0:
+                stats["already_confirmed"] += 1  # Count as "protected"
+                stats["results"].append({
+                    "transaction": txn,
+                    "method": "already_categorized",
+                    "metadata": {"reason": "confidence >= 1.0 (rule or transaction type)"},
+                })
+                continue
+
+            # Step 0: Check transaction type FIRST (highest priority)
+            if hasattr(txn, 'transaction_type') and txn.transaction_type:
+                txn_type = txn.transaction_type.upper().strip()
+                if txn_type in ['INT', 'CHG']:
+                    txn.category = "Interest and Charges"
+                    txn.category_confidence = 1.0
+                    txn.category_confirmed = False
+                    stats["transaction_type_matched"] += 1
+                    stats["results"].append({
+                        "transaction": txn,
+                        "method": "transaction_type",
+                        "metadata": {
+                            "transaction_type": txn_type,
+                            "cost_usd": 0.0,
+                        },
+                    })
+                    continue  # Skip rule matching for this transaction
 
             # Try rule matching
             rule_match = self.rule_engine.match_transaction(txn)
@@ -191,8 +260,20 @@ class HybridCategorizer:
                 # No rule match - queue for AI
                 uncategorized_for_ai.append(txn)
 
+        print(f"[OK] Transaction type matched (INT/CHG): {stats['transaction_type_matched']}")
         print(f"[OK] Rules matched: {stats['rule_matched']}")
         print(f"-> Need AI categorization: {len(uncategorized_for_ai)}")
+
+        # Update progress after rule matching
+        if progress_tracker:
+            processed = stats['transaction_type_matched'] + stats['rule_matched'] + stats['already_confirmed']
+            progress_tracker.update(
+                processed=processed,
+                message=f"Rules matched: {stats['rule_matched']}, Need AI: {len(uncategorized_for_ai)}",
+                transaction_type_matched=stats['transaction_type_matched'],
+                rule_matched=stats['rule_matched'],
+                uncategorized=len(uncategorized_for_ai)
+            )
 
         # STEP 2: Batch AI categorization for unmatched transactions
         if use_ai_fallback and self.ai_engine and len(uncategorized_for_ai) > 0:
@@ -200,6 +281,14 @@ class HybridCategorizer:
 
             # Split into batches
             num_batches = (len(uncategorized_for_ai) + ai_batch_size - 1) // ai_batch_size
+
+            if progress_tracker:
+                progress_tracker.update(
+                    processed=stats['transaction_type_matched'] + stats['rule_matched'] + stats['already_confirmed'],
+                    message=f"Starting AI categorization: {num_batches} batches",
+                    total_batches=num_batches,
+                    current_batch=0
+                )
 
             for batch_idx in range(num_batches):
                 batch_start = batch_idx * ai_batch_size
@@ -236,6 +325,20 @@ class HybridCategorizer:
 
                     print(f"[OK] Batch {batch_idx + 1} complete: {len(batch_txns)} transactions categorized")
 
+                    # Update progress after each batch
+                    if progress_tracker:
+                        total_processed = stats['transaction_type_matched'] + stats['rule_matched'] + stats['already_confirmed'] + stats['ai_categorized'] + stats['uncategorized']
+                        progress_tracker.update(
+                            processed=total_processed,
+                            message=f"AI Batch {batch_idx + 1}/{num_batches} complete",
+                            transaction_type_matched=stats['transaction_type_matched'],
+                            rule_matched=stats['rule_matched'],
+                            ai_categorized=stats['ai_categorized'],
+                            uncategorized=stats['uncategorized'],
+                            current_batch=batch_idx + 1,
+                            total_batches=num_batches
+                        )
+
                 except Exception as e:
                     print(f"[ERROR] Batch {batch_idx + 1} failed: {e}")
                     # Mark all in batch as uncategorized
@@ -270,10 +373,18 @@ class HybridCategorizer:
         elapsed_secs = time.time() - start_time
         print(f"\n=== COMPLETE ===")
         print(f"Total time: {elapsed_secs:.1f}s")
+        print(f"Transaction type matched (INT/CHG): {stats['transaction_type_matched']}")
         print(f"Rule matched: {stats['rule_matched']}")
         print(f"AI categorized: {stats['ai_categorized']}")
         print(f"Uncategorized: {stats['uncategorized']}")
         print(f"Cost: ${stats['total_cost_usd']:.4f}")
+
+        # Mark progress as complete
+        if progress_tracker:
+            progress_tracker.complete(
+                f"Categorization complete! {stats['transaction_type_matched']} by type, "
+                f"{stats['rule_matched']} by rules, {stats['ai_categorized']} by AI"
+            )
 
         return stats
 

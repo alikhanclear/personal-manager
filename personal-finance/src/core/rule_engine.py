@@ -46,15 +46,21 @@ class RuleEngine:
         """
         Check if description matches pattern using WHOLE-WORD token matching.
 
-        NEW LOGIC:
+        NEW LOGIC (Nov 29, 2025 - Fixed trailing punctuation bug):
         - Tokenizes both description and pattern into words
         - Pattern must match as complete words/tokens (not substrings)
-        - Delimiters: space, comma, asterisk, hyphen, dot, etc.
+        - Delimiters: ONLY space and asterisk (*)
+        - Strips trailing punctuation from description tokens when comparing
+        - Preserves: hyphens, dots, slashes in middle of words (e.g., "CO-OP", "APPLE.COM/BILL")
 
         Examples:
           Pattern "NETFLIX" matches "PAYPAL *NETFLIX" ✓ (NETFLIX is a whole word)
           Pattern "TFL" does NOT match "NETFLIX" ✗ (TFL is inside NETFLIX)
           Pattern "TFL" matches "TFL TRAVEL" ✓ (TFL is a whole word)
+          Pattern "CO-OP" matches "CO-OP FOOD" ✓ (hyphen preserved)
+          Pattern "APPLE.COM/BILL" matches exactly ✓ (dot and slash preserved)
+          Pattern "CLEARTHREAD STARLI" matches "CLEARTHREAD STARLI, INITIAL PAYMENT" ✓ (comma ignored)
+          Pattern "FOA PEACE IN PALESTINE" matches "FOA PEACE IN , PALESTINE , LEICESTER" ✓ (commas ignored)
 
         Args:
             description: Transaction description (uppercase)
@@ -67,26 +73,39 @@ class RuleEngine:
 
         pattern_upper = pattern.upper().strip()
 
-        # Tokenize description into words using common delimiters
-        # Delimiters: space, comma, asterisk, hyphen, dot, slash, etc.
-        description_tokens = re.split(r'[\s,*\-./\\|()]+', description.upper())
+        # Tokenize description into words using MINIMAL delimiters
+        # Delimiters: ONLY space (whitespace) and asterisk (bank separator)
+        # This preserves: hyphens, commas, dots, slashes, ampersands, parentheses, etc.
+        description_tokens = re.split(r'[\s*]+', description.upper())
 
         # Remove empty tokens
         description_tokens = [t for t in description_tokens if t]
 
+        # Strip trailing punctuation from description tokens
+        # This fixes: "CLEARTHREAD STARLI," → "CLEARTHREAD STARLI" matching
+        # But preserves: "CO-OP" and "APPLE.COM/BILL" (punctuation in middle)
+        description_tokens_normalized = [
+            re.sub(r'[,;:.!?()]+$', '', token)  # Remove trailing punctuation
+            for token in description_tokens
+        ]
+
+        # Remove empty tokens created by standalone punctuation
+        # This fixes: "FOA PEACE IN , PALESTINE" where commas become empty strings
+        description_tokens_normalized = [t for t in description_tokens_normalized if t]
+
         # Check if pattern appears as a complete token
         # Pattern can be multi-word (e.g., "AMAZON PRIME")
-        pattern_tokens = re.split(r'[\s,*\-./\\|()]+', pattern_upper)
+        pattern_tokens = re.split(r'[\s*]+', pattern_upper)
         pattern_tokens = [t for t in pattern_tokens if t]
 
         # If single-word pattern, check if it's in description tokens
         if len(pattern_tokens) == 1:
-            return pattern_tokens[0] in description_tokens
+            return pattern_tokens[0] in description_tokens_normalized
 
         # If multi-word pattern, check if sequence appears in description
         # E.g., pattern "AMAZON PRIME" should match "PAYPAL *AMAZON PRIME LTD"
-        for i in range(len(description_tokens) - len(pattern_tokens) + 1):
-            if description_tokens[i:i+len(pattern_tokens)] == pattern_tokens:
+        for i in range(len(description_tokens_normalized) - len(pattern_tokens) + 1):
+            if description_tokens_normalized[i:i+len(pattern_tokens)] == pattern_tokens:
                 return True
 
         return False

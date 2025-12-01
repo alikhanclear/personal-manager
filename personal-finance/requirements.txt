@@ -4,6 +4,7 @@
 polars>=0.19.0
 pandas>=2.0.0  # Optional, for compatibility
 openpyxl>=3.1.0  # For Excel export
+fastexcel>=0.18.0  # For Excel import with Polars
 
 # Database
 # SQLite is built into Python, no separate package needed

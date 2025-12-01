@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .models import Category, Rule, Transaction, PotentialDuplicate
 
@@ -423,6 +423,84 @@ class FinanceDatabase:
             cursor.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
             conn.commit()
 
+    def import_rules(self, rules: List[Rule]) -> tuple[int, int]:
+        """
+        Import rules in APPEND mode (keep existing rules, add new ones).
+        Skips duplicates (same pattern + category).
+
+        Args:
+            rules: List of Rule objects to import
+
+        Returns:
+            Tuple of (inserted_count, skipped_count)
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            inserted = 0
+            skipped = 0
+
+            for rule in rules:
+                # Check if rule already exists (same pattern + category)
+                cursor.execute("""
+                    SELECT COUNT(*) FROM rules
+                    WHERE pattern = ? AND category_id = ?
+                """, (rule.pattern, rule.category_id))
+
+                exists = cursor.fetchone()[0] > 0
+
+                if not exists:
+                    cursor.execute("""
+                        INSERT INTO rules (id, pattern, category_id, priority, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        rule.id,
+                        rule.pattern,
+                        rule.category_id,
+                        rule.priority,
+                        rule.created_at.isoformat(),
+                    ))
+                    inserted += 1
+                else:
+                    skipped += 1
+
+            conn.commit()
+
+        return (inserted, skipped)
+
+    def replace_all_rules(self, rules: List[Rule]) -> int:
+        """
+        Replace ALL existing rules with new rules.
+        WARNING: This deletes all existing rules first.
+
+        Args:
+            rules: List of Rule objects to import
+
+        Returns:
+            Number of rules inserted
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Delete all existing rules
+            cursor.execute("DELETE FROM rules")
+
+            # Insert new rules
+            for rule in rules:
+                cursor.execute("""
+                    INSERT INTO rules (id, pattern, category_id, priority, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    rule.id,
+                    rule.pattern,
+                    rule.category_id,
+                    rule.priority,
+                    rule.created_at.isoformat(),
+                ))
+
+            conn.commit()
+
+        return len(rules)
+
     def delete_all_transactions(self) -> int:
         """
         Delete ALL transactions from database (preserves categories and rules).
@@ -564,12 +642,24 @@ class FinanceDatabase:
 
     # ==================== STATISTICS ====================
 
-    def get_statistics(self) -> dict:
-        """Get database statistics."""
+    def get_statistics(self, account_number: Optional[str] = None) -> dict:
+        """
+        Get database statistics, optionally filtered by account.
+
+        Args:
+            account_number: Optional account number to filter by (None = all accounts)
+
+        Returns:
+            Dictionary of statistics
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT COUNT(*) FROM transactions")
+            # Build conditional WHERE clause for account filtering
+            where_clause = "WHERE account_number = ?" if account_number else ""
+            params = [account_number] if account_number else []
+
+            cursor.execute(f"SELECT COUNT(*) FROM transactions {where_clause}", params)
             total_transactions = cursor.fetchone()[0]
 
             cursor.execute("SELECT COUNT(*) FROM categories")
@@ -578,18 +668,19 @@ class FinanceDatabase:
             cursor.execute("SELECT COUNT(*) FROM rules")
             total_rules = cursor.fetchone()[0]
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT COUNT(*) FROM transactions
-                WHERE category_confirmed = 1
-            """)
+                {where_clause}{"AND" if account_number else "WHERE"} category_confirmed = 1
+            """, params)
             categorized_transactions = cursor.fetchone()[0]
 
             cursor.execute("SELECT COUNT(DISTINCT account_number) FROM transactions")
             total_accounts = cursor.fetchone()[0]
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT MIN(date), MAX(date) FROM transactions
-            """)
+                {where_clause}
+            """, params)
             date_range = cursor.fetchone()
 
         return {
@@ -601,3 +692,23 @@ class FinanceDatabase:
             "earliest_transaction": date_range[0],
             "latest_transaction": date_range[1],
         }
+
+    def get_unique_accounts(self) -> List[Tuple[str, str]]:
+        """
+        Get all unique accounts in database, ordered by account name.
+
+        Returns:
+            List of (account_number, account_name) tuples
+            Example: [('12345678', 'Current Account'), ('87654321', 'Savings Account')]
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT account_number, account_name
+                FROM transactions
+                WHERE account_number IS NOT NULL
+                ORDER BY account_name ASC
+            """)
+            rows = cursor.fetchall()
+
+        return [(row['account_number'], row['account_name']) for row in rows]

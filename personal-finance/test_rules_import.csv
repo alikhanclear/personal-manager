@@ -1,0 +1,21 @@
+pattern,category,priority
+STARBUCKS,Coffee/Tea,10
+COSTA,Coffee/Tea,10
+WAITROSE,Supermarket,10
+SAINSBURYS,Supermarket,10
+TESCO,Supermarket,10
+ASDA,Supermarket,10
+AMAZON,Shopping,8
+EBAY,Shopping,8
+PAYPAL *SPOTIFY,Streaming Services,10
+NETFLIX,Streaming Services,10
+DISNEY,Streaming Services,10
+TFL,Public Transport,10
+UBER,Transport,9
+DELIVEROO,Dining Out,9
+JUST EAT,Dining Out,9
+MCDONALDS,Fast Food,10
+KFC,Fast Food,10
+SHELL,Fuel/Petrol,10
+BP,Fuel/Petrol,10
+ESSO,Fuel/Petrol,10

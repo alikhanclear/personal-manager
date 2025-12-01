@@ -9,6 +9,7 @@ Tabs:
 """
 import os
 import sys
+import subprocess
 from pathlib import Path
 from datetime import datetime
 import base64
@@ -28,6 +29,7 @@ from src.data.database import FinanceDatabase
 from src.data.csv_parser import NatWestParser
 from src.data.importer import TransactionImporter
 from src.data.models import Category, Transaction
+from src.utils.progress_tracker import ProgressTracker
 from src.core.categorizer import HybridCategorizer
 from src.core.rule_engine import create_default_rules
 from config.default_categories import DEFAULT_CATEGORIES
@@ -180,16 +182,29 @@ def create_layout():
                 html.H1("💰 Personal Finance Manager", className="mb-0"),
                 html.P("Import, categorize, and analyze your transactions",
                        className="text-muted mb-0"),
-            ], width=8),
+            ], width=5),
             dbc.Col([
                 html.Div([
                     html.Small("Total Transactions", className="d-block text-muted"),
                     html.H3(f"{stats['total_transactions']:,}", className="mb-0"),
                 ], className="text-end"),
             ], width=4),
+            dbc.Col([
+                html.Label("Account:", className="fw-bold mb-1 d-block"),
+                dcc.Dropdown(
+                    id='account-selector',
+                    options=[],  # Populated by callback
+                    value="",  # Empty string = All Accounts (converted to None in callback)
+                    clearable=False,
+                    style={'width': '100%'}
+                ),
+            ], width=3),
         ], className="mb-4 mt-3"),
 
         html.Hr(),
+
+        # Store for selected account (persists across tabs)
+        dcc.Store(id='selected-account', data=None),
 
         # Tabs
         dbc.Tabs([
@@ -498,6 +513,7 @@ def create_layout():
                             dbc.Col([
                                 dbc.ButtonGroup([
                                     dbc.Button("➕ Add New Rule", id="btn-add-rule", color="success", size="sm"),
+                                    dbc.Button("📥 Import Rules", id="btn-import-rules", color="primary", size="sm"),
                                     dbc.Button("🔄 Refresh", id="btn-refresh-rules", color="secondary", size="sm"),
                                     dbc.Button("🗑️ Delete Selected", id="btn-delete-selected-rules", color="danger", size="sm"),
                                     dbc.Button("🔁 Re-categorize ALL", id="btn-reapply-all-rules", color="warning", size="sm"),
@@ -544,6 +560,45 @@ def create_layout():
                                 dbc.Button("Add Rule", id="btn-save-new-rule", color="success", size="sm"),
                             ]),
                         ], id="modal-add-rule", is_open=False),
+
+                        # Modal for importing rules
+                        dbc.Modal([
+                            dbc.ModalHeader(dbc.ModalTitle("Import Rules from CSV/Excel")),
+                            dbc.ModalBody([
+                                # File upload
+                                dcc.Upload(
+                                    id='upload-rules-file',
+                                    children=dbc.Button("📂 Select CSV or Excel File", color="primary", outline=True, className="mb-3 w-100"),
+                                    multiple=False
+                                ),
+                                html.Div(id='upload-rules-filename', className="mb-3 text-muted"),
+
+                                # Import mode selection
+                                dbc.Label("Import Mode"),
+                                dbc.RadioItems(
+                                    id='import-rules-mode',
+                                    options=[
+                                        {'label': ' Append: Add new rules (skip duplicates)', 'value': 'append'},
+                                        {'label': ' Replace: Delete all existing rules and import new ones', 'value': 'replace'},
+                                    ],
+                                    value='append',
+                                    className="mb-3",
+                                ),
+
+                                # Warning for replace mode
+                                html.Div(id='import-rules-warning', className="mb-3"),
+
+                                # Preview table (will be populated after file upload)
+                                html.Div(id='import-rules-preview', className="mb-3"),
+
+                                # Validation messages
+                                html.Div(id='import-rules-validation', className="mb-3"),
+                            ]),
+                            dbc.ModalFooter([
+                                dbc.Button("Cancel", id="btn-cancel-import-rules", color="secondary", size="sm"),
+                                dbc.Button("Import", id="btn-confirm-import-rules", color="primary", size="sm", disabled=True),
+                            ]),
+                        ], id="modal-import-rules", is_open=False, size="lg"),
 
                         # Dangerous operations row
                         dbc.Row([
@@ -622,6 +677,9 @@ def create_layout():
                         # Store for current editing rule
                         dcc.Store(id='editing-rule-id', data=None),
 
+                        # Store for parsed rules import data
+                        dcc.Store(id='import-rules-parsed-data', data=None),
+
                     ], width=12),
                 ]),
             ]),
@@ -655,6 +713,40 @@ def create_layout():
                 dbc.Button("Yes, Delete All Transactions", id="purge-confirm", color="danger"),
             ]),
         ], id="purge-modal", is_open=False),
+
+        # Progress Modal
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle(id="progress-modal-title")),
+            dbc.ModalBody([
+                html.Div(id="progress-message", className="mb-3"),
+
+                html.Div([
+                    html.Label("Overall Progress", className="small text-muted mb-1"),
+                    dbc.Progress(id="progress-bar-overall", className="mb-3", style={"height": "25px"}),
+                ]),
+
+                html.Div(id="progress-details", className="mt-3"),
+
+                html.Div([
+                    html.Label("Batch Progress", className="small text-muted mb-1"),
+                    dbc.Progress(id="progress-bar-batch", className="mb-2", style={"height": "15px"}),
+                ], id="batch-progress-container", style={"display": "none"}),
+
+                html.Div(id="progress-stats", className="mt-3 small"),
+            ]),
+            dbc.ModalFooter([
+                dbc.Button("Cancel", id="progress-cancel", className="me-2", color="secondary", style={"display": "none"}),
+                dbc.Button("Close", id="progress-close", color="primary", style={"display": "none"}),
+            ]),
+        ], id="progress-modal", is_open=False, backdrop="static", keyboard=False),
+
+        # Progress polling interval
+        dcc.Interval(
+            id='progress-interval',
+            interval=1000,  # Update every 1 second
+            n_intervals=0,
+            disabled=True
+        ),
 
         # Footer
         html.Hr(className="mt-5"),
@@ -757,25 +849,28 @@ def handle_csv_upload(contents, filename):
 @callback(
     Output('rules-status', 'children'),
     Input('btn-apply-rules', 'n_clicks'),
+    State('selected-account', 'data'),
     prevent_initial_call=True,
 )
-def apply_rules(n_clicks):
+def apply_rules(n_clicks, selected_account):
     """Apply rule-based categorization ONLY to uncategorized transactions (preserves AI categorizations)."""
     if n_clicks is None:
         raise PreventUpdate
 
     try:
-        # Get ONLY uncategorized transactions (preserve existing categorizations)
-        all_transactions = db.get_transactions()
+        # Get transactions FILTERED BY ACCOUNT
+        all_transactions = db.get_transactions(account_number=selected_account)
         uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
 
+        account_label = selected_account or "All Accounts"
+
         if len(all_transactions) == 0:
-            return dbc.Alert("No transactions found. Import a CSV file first.", color="info")
+            return dbc.Alert(f"No transactions found for {account_label}. Import a CSV file first.", color="info")
 
         if len(uncategorized) == 0:
             return dbc.Alert([
                 html.H5("ℹ️ No Work Needed", className="alert-heading"),
-                html.P("All transactions are already categorized!"),
+                html.P(f"All transactions for {account_label} are already categorized!"),
                 html.P("If you want to re-apply rules to ALL transactions (this will overwrite AI categorizations), you'll need to use a different approach.", className="small text-muted"),
             ], color="info")
 
@@ -789,12 +884,12 @@ def apply_rules(n_clicks):
         # Save results
         categorizer.save_transaction_categories(results)
 
-        # Get updated counts
-        all_transactions_updated = db.get_transactions()
+        # Get updated counts (filtered by account)
+        all_transactions_updated = db.get_transactions(account_number=selected_account)
         still_uncategorized = len([t for t in all_transactions_updated if not t.category or t.category == "Uncategorized"])
 
         return dbc.Alert([
-            html.H5("✓ Rules Applied to Uncategorized Transactions", className="alert-heading"),
+            html.H5(f"✓ Rules Applied to {account_label}", className="alert-heading"),
             html.Hr(),
             html.P([
                 f"📊 Processed: {len(uncategorized)} uncategorized transactions",
@@ -852,91 +947,234 @@ def refresh_import_status(n_clicks):
 
 
 @callback(
-    Output('ai-status-display', 'children'),
+    [
+        Output('ai-status-display', 'children'),
+        Output('progress-modal', 'is_open'),
+        Output('progress-interval', 'disabled'),
+    ],
     Input('btn-start-ai', 'n_clicks'),
+    State('selected-account', 'data'),
     prevent_initial_call=True,
 )
-def run_ai_categorization(n_clicks):
-    """Run AI categorization inline (fast with batching!)."""
+def run_ai_categorization(n_clicks, selected_account):
+    """Launch background AI categorization with live progress tracking."""
     if n_clicks is None:
         raise PreventUpdate
 
     try:
-        # Get uncategorized transactions
-        all_transactions = db.get_transactions()
-        uncategorized = [t for t in all_transactions if not t.category or t.category == "Uncategorized"]
+        # Get uncategorized transactions ONLY (filtered by account)
+        all_transactions = db.get_transactions(account_number=selected_account)
+        uncategorized = [
+            t for t in all_transactions
+            if (not t.category or t.category == "Uncategorized")
+            and not (t.category_confidence and t.category_confidence >= 1.0)
+            and not t.category_confirmed
+        ]
+
+        account_label = selected_account or "All Accounts"
 
         if len(uncategorized) == 0:
-            return dbc.Alert([
-                html.H5("ℹ️ No Work Needed", className="alert-heading"),
-                html.P("All transactions are already categorized!"),
-            ], color="info")
+            return (
+                dbc.Alert([
+                    html.H5("ℹ️ No Work Needed", className="alert-heading"),
+                    html.P(f"All transactions for {account_label} are already categorized!"),
+                ], color="info"),
+                False,  # Don't open modal
+                True    # Keep interval disabled
+            )
 
-        # Get categorizer
-        import os
+        # Check API key
         api_key = os.getenv("APP_ANTHROPIC_API_KEY")
         if not api_key:
-            return dbc.Alert([
-                html.H5("❌ Missing API Key", className="alert-heading"),
-                html.P("APP_ANTHROPIC_API_KEY not found in .env file."),
-                html.P("Please add your Anthropic API key to continue.", className="small text-muted"),
-            ], color="danger")
+            return (
+                dbc.Alert([
+                    html.H5("❌ Missing API Key", className="alert-heading"),
+                    html.P("APP_ANTHROPIC_API_KEY not found in .env file."),
+                ], color="danger"),
+                False,  # Don't open modal
+                True    # Keep interval disabled
+            )
 
-        categorizer = get_categorizer()
+        # Clear old progress
+        progress_tracker = ProgressTracker()
+        progress_tracker.clear()
 
-        # Show starting message
+        # Launch background worker
+        import subprocess
         print(f"\n{'='*60}")
-        print(f"Starting AI categorization for {len(uncategorized)} transactions...")
+        print(f"Launching AI categorization for {len(uncategorized)} transactions ({account_label})...")
         print(f"{'='*60}")
 
-        # Run categorization (with batch processing!)
-        import time
-        start_time = time.time()
+        # Build command with account parameter if selected
+        if selected_account:
+            cmd = [sys.executable, "run_ai_categorization_worker.py", "--account", selected_account]
+        else:
+            cmd = [sys.executable, "run_ai_categorization_worker.py"]
 
-        results = categorizer.categorize_batch(
-            uncategorized,
-            use_ai_fallback=True,
-            ai_batch_size=30  # 30 transactions per API call (more reliable)
+        subprocess.Popen(
+            cmd,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         )
 
-        # Save results
-        categorizer.save_transaction_categories(results)
-
-        elapsed_secs = time.time() - start_time
-
-        # Return success message
-        return dbc.Alert([
-            html.H5("✓ AI Categorization Complete!", className="alert-heading"),
-            html.Hr(),
-            html.P([
-                f"⏱️ Completed in {elapsed_secs:.1f} seconds",
-                html.Br(),
-                f"📋 {results['rule_matched']:,} matched by rules (FREE)",
-                html.Br(),
-                f"🤖 {results['ai_categorized']:,} categorized by AI",
-                html.Br(),
-                f"❓ {results['uncategorized']:,} still uncategorized",
-                html.Br(),
-                f"💰 Estimated cost: ${results['total_cost_usd']:.4f}",
-            ]),
-            html.P("👉 Go to 'Review & Correct' tab to review AI suggestions",
-                   className="mb-0 small text-muted"),
-        ], color="success")
+        # Return status and open progress modal
+        return (
+            dbc.Alert([
+                html.P(f"🚀 AI Categorization started for {account_label}..."),
+                html.P("Watch the progress window for live updates.", className="small text-muted mb-0"),
+            ], color="info"),
+            True,   # Open progress modal
+            False   # Enable interval polling
+        )
 
     except Exception as e:
         import traceback
-        error_details = traceback.format_exc()
         print(f"\n{'='*60}")
         print(f"❌ AI Categorization Error:")
-        print(error_details)
+        print(traceback.format_exc())
         print(f"{'='*60}\n")
 
-        return dbc.Alert([
-            html.H5("❌ Error During Categorization", className="alert-heading"),
-            html.P(str(e)),
-            html.Hr(),
-            html.P("Check the terminal/console for detailed error information.", className="small text-muted"),
-        ], color="danger")
+        return (
+            dbc.Alert([
+                html.H5("❌ Error", className="alert-heading"),
+                html.P(str(e)),
+            ], color="danger"),
+            False,  # Don't open modal
+            True    # Keep interval disabled
+        )
+
+
+@callback(
+    [
+        Output('progress-modal-title', 'children'),
+        Output('progress-message', 'children'),
+        Output('progress-bar-overall', 'value'),
+        Output('progress-bar-overall', 'label'),
+        Output('progress-details', 'children'),
+        Output('progress-stats', 'children'),
+        Output('progress-close', 'style'),
+        Output('progress-interval', 'disabled', allow_duplicate=True),
+        Output('progress-modal', 'is_open', allow_duplicate=True),
+    ],
+    Input('progress-interval', 'n_intervals'),
+    State('progress-modal', 'is_open'),
+    prevent_initial_call=True,
+)
+def update_progress(n_intervals, is_open):
+    """Poll progress file and update modal UI in real-time."""
+    if not is_open:
+        raise PreventUpdate
+
+    # Read progress from file
+    tracker = ProgressTracker()
+    progress = tracker.get_progress()
+
+    if not progress:
+        # No progress file yet - show waiting message
+        return (
+            "AI Categorization",
+            "Initializing...",
+            0,
+            "0%",
+            "",
+            "",
+            {"display": "none"},  # Hide close button
+            False,  # Keep interval enabled
+            True,   # Keep modal open
+        )
+
+    # Calculate progress percentage
+    total = progress.get("total", 1)
+    processed = progress.get("processed", 0)
+    progress_pct = int((processed / total) * 100) if total > 0 else 0
+
+    # Get status
+    status = progress.get("status", "running")
+    message = progress.get("message", "Processing...")
+
+    # Build details
+    details = html.Div([
+        html.P([
+            html.Strong("Transaction Type Matched: "),
+            f"{progress.get('transaction_type_matched', 0):,}",
+        ], className="mb-1 small"),
+        html.P([
+            html.Strong("Rule Matched: "),
+            f"{progress.get('rule_matched', 0):,}",
+        ], className="mb-1 small"),
+        html.P([
+            html.Strong("AI Categorized: "),
+            f"{progress.get('ai_categorized', 0):,}",
+        ], className="mb-1 small"),
+        html.P([
+            html.Strong("Uncategorized: "),
+            f"{progress.get('uncategorized', 0):,}",
+        ], className="mb-1 small"),
+        html.P([
+            html.Strong("Errors: "),
+            f"{progress.get('errors', 0):,}",
+        ], className="mb-0 small text-danger" if progress.get('errors', 0) > 0 else "mb-0 small"),
+    ])
+
+    # Build stats
+    stats = html.P([
+        f"Processed {processed:,} of {total:,} transactions",
+    ], className="mb-0")
+
+    # Check if complete or error
+    if status == "complete":
+        return (
+            "✓ Categorization Complete!",
+            html.Div([
+                html.P(message, className="text-success mb-2"),
+                html.P("You can now close this window and review the results.", className="small text-muted mb-0"),
+            ]),
+            100,
+            "100%",
+            details,
+            stats,
+            {"display": "inline-block"},  # Show close button
+            True,   # Disable interval
+            True,   # Keep modal open
+        )
+    elif status == "error":
+        return (
+            "❌ Categorization Failed",
+            html.Div([
+                html.P(message, className="text-danger mb-0"),
+            ]),
+            progress_pct,
+            f"{progress_pct}%",
+            details,
+            stats,
+            {"display": "inline-block"},  # Show close button
+            True,   # Disable interval
+            True,   # Keep modal open
+        )
+    else:
+        # Still running
+        return (
+            "AI Categorization in Progress...",
+            message,
+            progress_pct,
+            f"{progress_pct}%",
+            details,
+            stats,
+            {"display": "none"},  # Hide close button
+            False,  # Keep interval enabled
+            True,   # Keep modal open
+        )
+
+
+@callback(
+    Output('progress-modal', 'is_open', allow_duplicate=True),
+    Input('progress-close', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def close_progress_modal(n_clicks):
+    """Close the progress modal when user clicks Close button."""
+    if n_clicks:
+        return False
+    raise PreventUpdate
 
 
 @callback(
@@ -1169,11 +1407,12 @@ def save_rule_edits(current_data, previous_data):
     Input('btn-refresh-review', 'n_clicks'),
     Input('review-case-insensitive', 'value'),
     State('selected-transaction-ids', 'data'),
+    State('selected-account', 'data'),
 )
-def update_review_table(filter_value, page_size, current_page, n_clicks, case_insensitive_value, selected_txn_ids):
+def update_review_table(filter_value, page_size, current_page, n_clicks, case_insensitive_value, selected_txn_ids, selected_account):
     """Update the review table of transactions with checkboxes for batch operations."""
-    # Get all transactions
-    transactions = db.get_transactions()
+    # Get all transactions FILTERED BY ACCOUNT
+    transactions = db.get_transactions(account_number=selected_account)
 
     if len(transactions) == 0:
         return dbc.Alert("No transactions found. Import a CSV file first.", color="info"), "", True, True
@@ -1199,8 +1438,9 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
     display_transactions = filtered
     total_transactions = len(filtered)
 
-    # Page info text (no pagination)
-    page_info = f"Showing all {total_transactions} transactions"
+    # Page info text (no pagination) - include account info
+    account_label = selected_account or "All Accounts"
+    page_info = f"Showing all {total_transactions} transactions ({account_label})"
 
     # Disable pagination buttons (not used)
     prev_disabled = True
@@ -1232,6 +1472,7 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
             'transaction_id': txn.id,
             '#': row_number,
             'Date': txn.date.strftime('%d %b %Y'),
+            'Account': txn.account_name if txn.account_name else 'Unknown',
             'Description': txn.description[:50] + ('...' if len(txn.description) > 50 else ''),
             'Amount': f"£{txn.amount:,.2f}",
             'Category': txn.category if txn.category else 'Uncategorized',
@@ -1254,6 +1495,7 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
     columns = [
         {'name': '#', 'id': '#', 'editable': False, 'type': 'numeric'},
         {'name': 'Date', 'id': 'Date', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
+        {'name': 'Account', 'id': 'Account', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
         {'name': 'Description', 'id': 'Description', 'editable': False, 'filter_options': {'case': 'insensitive'} if case_insensitive else {}},
         {'name': 'Amount', 'id': 'Amount', 'editable': False},
         {
@@ -1708,22 +1950,28 @@ def batch_confirm_and_create_rules(n_clicks, selected_txn_ids):
     Output('stats-content', 'children'),
     Input('stats-content', 'id'),  # Dummy input for initial load
     Input('btn-refresh-stats', 'n_clicks'),  # Manual refresh
+    State('selected-account', 'data'),
 )
-def update_stats(_, n_clicks):
+def update_stats(_, n_clicks, selected_account):
     """Update statistics page."""
-    stats = db.get_statistics()
+    # Get stats FILTERED BY ACCOUNT
+    stats = db.get_statistics(account_number=selected_account)
     categorizer = get_categorizer()
     cat_stats = categorizer.get_statistics()
 
-    return dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.H3(f"{stats['total_transactions']:,}", className="text-primary"),
-                    html.P("Total Transactions"),
+    account_label = selected_account or "All Accounts"
+
+    return dbc.Container([
+        html.H4(f"Statistics - {account_label}", className="mb-3"),
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H3(f"{stats['total_transactions']:,}", className="text-primary"),
+                        html.P("Total Transactions"),
+                    ])
                 ])
-            ])
-        ], width=3),
+            ], width=3),
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
@@ -1748,6 +1996,7 @@ def update_stats(_, n_clicks):
                 ])
             ])
         ], width=3),
+        ])
     ])
 
 
@@ -1781,6 +2030,16 @@ def export_to_excel(n_clicks):
         # Convert to DataFrame with all useful fields (including Row #)
         export_data = []
         for idx, txn in enumerate(all_transactions, 1):
+            # Determine status based on confidence and confirmation
+            if txn.category_confirmed:
+                status = 'Confirmed'
+            elif txn.category_confidence == 1.0:
+                status = 'Rule Matched'
+            elif txn.category_confidence is not None and txn.category_confidence < 1.0:
+                status = 'AI Suggested'
+            else:
+                status = 'Uncategorized'
+
             export_data.append({
                 'Row #': idx,
                 'Date': txn.date.strftime('%Y-%m-%d') if hasattr(txn.date, 'strftime') else str(txn.date),
@@ -1790,6 +2049,7 @@ def export_to_excel(n_clicks):
                 'Account Number': txn.account_number,
                 'Transaction Type': txn.transaction_type if hasattr(txn, 'transaction_type') else '',
                 'Category': txn.category if txn.category else 'Uncategorized',
+                'Status': status,
                 'Confidence': txn.category_confidence if txn.category_confidence is not None else '',
                 'Confirmed': 'Yes' if txn.category_confirmed else 'No',
                 'Transaction ID': txn.id,
@@ -1844,6 +2104,10 @@ def export_rules_to_excel(n_clicks):
         if len(rules) == 0:
             return None
 
+        # Get all categories and create ID-to-name mapping
+        categories = db.get_categories()
+        category_map = {cat.id: cat.name for cat in categories}
+
         # Convert to DataFrame with row numbers
         export_data = []
         for idx, r in enumerate(sorted(rules, key=lambda x: (-x.priority, x.pattern)), 1):
@@ -1861,10 +2125,13 @@ def export_rules_to_excel(n_clicks):
                 except:
                     created_date = "N/A"
 
+            # Map category_id to category name for human-readable export
+            category_name = category_map.get(r.category_id, "Unknown")
+
             export_data.append({
                 'Row #': idx,
                 'Pattern': r.pattern,
-                'Category': r.category_id,
+                'Category': category_name,  # Export name, not UUID!
                 'Priority': r.priority,
                 'Created': created_date,
             })
@@ -1903,15 +2170,19 @@ def export_rules_to_excel(n_clicks):
 
 @callback(
     Output('reapply-rules-status', 'children'),
+    Output('btn-refresh-review', 'n_clicks'),  # Auto-refresh Review & Correct tab
     Input('btn-reapply-all-rules', 'n_clicks'),
     State('force-recategorize', 'value'),
+    State('btn-refresh-review', 'n_clicks'),  # Get current click count
     prevent_initial_call=True,
 )
-def reapply_all_rules(n_clicks, force_recategorize_value):
+def reapply_all_rules(n_clicks, force_recategorize_value, current_refresh_clicks):
     """Re-apply rules to transactions.
 
     By default, preserves confirmed transactions.
     If 'Force Re-categorize' is enabled, overwrites ALL transactions including confirmed ones.
+
+    After re-categorizing, automatically refreshes the Review & Correct tab.
     """
     if n_clicks is None:
         raise PreventUpdate
@@ -1924,9 +2195,12 @@ def reapply_all_rules(n_clicks, force_recategorize_value):
         all_transactions = db.get_transactions()
 
         if len(all_transactions) == 0:
-            return dbc.Alert("No transactions found.", color="info")
+            return dbc.Alert("No transactions found.", color="info"), current_refresh_clicks or 0
 
-        # Get categorizer
+        # CRITICAL: Clear cache to reload rules from database
+        APP_STATE["categorizer"] = None
+
+        # Get categorizer (will reload rules fresh)
         categorizer = get_categorizer()
 
         # Categorize transactions with rules ONLY (no AI)
@@ -1948,7 +2222,7 @@ def reapply_all_rules(n_clicks, force_recategorize_value):
         # Build status message
         mode_msg = "🔥 FORCE MODE: Overwrote ALL transactions including confirmed ones" if force_mode else "✓ Protected confirmed transactions"
 
-        return dbc.Alert([
+        status_alert = dbc.Alert([
             html.H5("✓ Re-applied Rules Successfully", className="alert-heading"),
             html.Hr(),
             html.P([
@@ -1962,11 +2236,19 @@ def reapply_all_rules(n_clicks, force_recategorize_value):
                 html.Br(),
                 html.Br(),
                 html.Strong(mode_msg, className="text-info" if force_mode else "text-success"),
+                html.Br(),
+                html.Br(),
+                html.Em("🔄 Review & Correct tab automatically refreshed", className="text-muted small"),
             ]),
         ], color="warning" if force_mode else "success")
 
+        # Increment refresh button click count to trigger auto-refresh
+        new_refresh_clicks = (current_refresh_clicks or 0) + 1
+
+        return status_alert, new_refresh_clicks
+
     except Exception as e:
-        return dbc.Alert(f"Error: {str(e)}", color="danger")
+        return dbc.Alert(f"Error: {str(e)}", color="danger"), current_refresh_clicks or 0
 
 
 @callback(
@@ -2000,6 +2282,9 @@ def delete_selected_rules(n_clicks, table_data, selected_rows):
 
         conn.commit()
         conn.close()
+
+        # CRITICAL: Clear categorizer cache so deleted rules are removed
+        APP_STATE["categorizer"] = None
 
         print(f"[Delete Rules] Successfully deleted {len(selected_rule_ids)} rules")
 
@@ -2079,6 +2364,9 @@ def save_new_rule(n_clicks, pattern, category_id, priority):
         # Save to database
         db.insert_rule(new_rule)
 
+        # CRITICAL: Clear categorizer cache so new rule is loaded
+        APP_STATE["categorizer"] = None
+
         print(f"[Add Rule] Created new rule: '{pattern}' -> {category_id} (Priority: {priority})")
 
         # Clear form and refresh table
@@ -2092,6 +2380,327 @@ def save_new_rule(n_clicks, pattern, category_id, priority):
         import traceback
         traceback.print_exc()
         return dbc.Alert(f"Error creating rule: {str(e)}", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+
+# ==================== IMPORT RULES CALLBACKS ====================
+
+@callback(
+    Output('modal-import-rules', 'is_open'),
+    Input('btn-import-rules', 'n_clicks'),
+    Input('btn-cancel-import-rules', 'n_clicks'),
+    State('modal-import-rules', 'is_open'),
+    prevent_initial_call=True,
+)
+def toggle_import_rules_modal(btn_import, btn_cancel, is_open):
+    """Open/close the Import Rules modal."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if button_id == 'btn-import-rules':
+        return True  # Open modal
+    else:
+        return False  # Close modal
+
+
+@callback(
+    Output('upload-rules-filename', 'children'),
+    Output('import-rules-preview', 'children'),
+    Output('import-rules-validation', 'children'),
+    Output('btn-confirm-import-rules', 'disabled'),
+    Output('import-rules-parsed-data', 'data'),  # Store parsed data
+    Input('upload-rules-file', 'contents'),
+    State('upload-rules-file', 'filename'),
+    prevent_initial_call=True,
+)
+def parse_uploaded_rules_file(contents, filename):
+    """Parse uploaded CSV/Excel file and validate rules."""
+    if contents is None:
+        raise PreventUpdate
+
+    try:
+        import base64
+        import io
+        import polars as pl
+        import tempfile
+
+        # Decode file contents
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+
+        # Log file info for diagnostics
+        print(f"[Import Rules] Parsing {filename} ({len(decoded)} bytes)")
+
+        # Parse CSV or Excel
+        # Use temporary file approach on Windows to avoid [Errno 22] Invalid argument
+        if filename.endswith('.csv'):
+            try:
+                # Try direct BytesIO first (faster)
+                df = pl.read_csv(
+                    io.BytesIO(decoded),
+                    encoding='utf8-lossy',  # Handle encoding issues
+                    truncate_ragged_lines=True,  # Handle malformed lines
+                )
+            except Exception as e:
+                # Fallback: Use temporary file (more reliable on Windows)
+                print(f"[Import Rules] BytesIO failed ({e}), using temp file...")
+                with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp:
+                    tmp.write(decoded)
+                    tmp_path = tmp.name
+                try:
+                    df = pl.read_csv(tmp_path, encoding='utf8-lossy', truncate_ragged_lines=True)
+                finally:
+                    # Clean up temp file
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
+        elif filename.endswith(('.xlsx', '.xls')):
+            df = pl.read_excel(io.BytesIO(decoded))
+        else:
+            return (
+                html.Span(f"❌ {filename}", className="text-danger"),
+                None,
+                dbc.Alert("Error: File must be CSV or Excel (.csv, .xlsx, .xls)", color="danger"),
+                True,
+                None
+            )
+
+        # Validate required columns
+        required_columns = ['pattern', 'category', 'priority']
+        missing_columns = [col for col in required_columns if col.lower() not in [c.lower() for c in df.columns]]
+
+        if missing_columns:
+            return (
+                html.Span(f"❌ {filename}", className="text-danger"),
+                None,
+                dbc.Alert(f"Error: Missing required columns: {', '.join(missing_columns)}", color="danger"),
+                True,
+                None
+            )
+
+        # Normalize column names (case-insensitive)
+        df = df.rename({col: col.lower() for col in df.columns})
+
+        # Validate data
+        validation_messages = []
+        categories = db.get_categories()
+        category_map = {cat.name.lower(): cat.id for cat in categories}
+
+        # Check for new categories (will be auto-created)
+        new_categories = []
+        for i, row in enumerate(df.iter_rows(named=True)):
+            cat_name = str(row['category']).strip()
+            if cat_name and cat_name.lower() not in category_map:
+                if cat_name not in new_categories:
+                    new_categories.append(cat_name)
+
+        if new_categories:
+            validation_messages.append(
+                html.Div([
+                    html.Strong("ℹ️ New categories will be created:"),
+                    html.Ul([html.Li(cat) for cat in new_categories[:10]]),  # Show first 10
+                    html.Small(f"({len(new_categories)} total new categories)", className="text-muted") if len(new_categories) > 10 else None,
+                ], className="text-info")
+            )
+
+        # Check for empty patterns
+        empty_patterns = [i+2 for i, row in enumerate(df.iter_rows(named=True)) if not str(row['pattern']).strip()]
+        if empty_patterns:
+            validation_messages.append(
+                html.Div([
+                    html.Strong("⚠️ Empty patterns found in rows:"),
+                    html.P(", ".join(map(str, empty_patterns[:10]))),
+                ], className="text-danger")
+            )
+
+        # Preview table
+        preview_df = df.head(10).to_pandas()
+        preview_table = dash_table.DataTable(
+            data=preview_df.to_dict('records'),
+            columns=[{'name': col, 'id': col} for col in preview_df.columns],
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '5px'},
+            style_header={'fontWeight': 'bold', 'backgroundColor': '#f8f9fa'},
+            page_size=10,
+        )
+
+        preview_component = html.Div([
+            html.Strong(f"Preview ({len(df)} rules found):"),
+            preview_table,
+        ])
+
+        # Store parsed data as JSON
+        parsed_data = df.to_pandas().to_dict('records')
+
+        # Enable/disable import button (only disable for errors, not warnings)
+        has_errors = any('text-danger' in str(msg) for msg in validation_messages)
+        import_disabled = has_errors
+
+        filename_component = html.Span(f"✓ {filename} ({len(df)} rules)", className="text-success")
+
+        validation_component = html.Div(validation_messages) if validation_messages else dbc.Alert(
+            "✓ All rules validated successfully!", color="success"
+        )
+
+        return filename_component, preview_component, validation_component, import_disabled, parsed_data
+
+    except Exception as e:
+        print(f"[Import Rules] Parse error: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Build helpful error message
+        error_msg = [
+            html.Strong("Error parsing file:"),
+            html.Br(),
+            html.Code(str(e)),
+        ]
+
+        # Add troubleshooting tips for common Windows errors
+        if "Errno 22" in str(e) or "Invalid argument" in str(e):
+            error_msg.extend([
+                html.Br(),
+                html.Br(),
+                html.Strong("Troubleshooting tips:"),
+                html.Ul([
+                    html.Li("Check that the CSV file is not open in Excel or another program"),
+                    html.Li("Try saving the file with UTF-8 encoding"),
+                    html.Li("Ensure the file has proper column headers (pattern, category, priority)"),
+                    html.Li("Remove any special characters or formatting from Excel"),
+                ]),
+            ])
+
+        return (
+            html.Span(f"❌ {filename}", className="text-danger"),
+            None,
+            dbc.Alert(error_msg, color="danger"),
+            True,
+            None
+        )
+
+
+@callback(
+    Output('import-rules-warning', 'children'),
+    Input('import-rules-mode', 'value'),
+    prevent_initial_call=True,
+)
+def show_replace_warning(mode):
+    """Show warning message when Replace mode is selected."""
+    if mode == 'replace':
+        rules_count = len(db.get_rules())
+        return dbc.Alert([
+            html.Strong("⚠️ WARNING: This will DELETE all existing rules!", className="me-2"),
+            html.Br(),
+            html.Small(f"You currently have {rules_count} rules. This action cannot be undone."),
+        ], color="danger")
+    return None
+
+
+@callback(
+    Output('reapply-rules-status', 'children', allow_duplicate=True),
+    Output('modal-import-rules', 'is_open', allow_duplicate=True),
+    Output('btn-refresh-rules', 'n_clicks', allow_duplicate=True),
+    Input('btn-confirm-import-rules', 'n_clicks'),
+    State('import-rules-parsed-data', 'data'),
+    State('import-rules-mode', 'value'),
+    prevent_initial_call=True,
+)
+def execute_import_rules(n_clicks, parsed_data, mode):
+    """Execute the import operation (Append or Replace)."""
+    if n_clicks is None or parsed_data is None:
+        raise PreventUpdate
+
+    try:
+        from src.data.models import Rule, Category
+        import polars as pl
+        import uuid
+
+        # Convert parsed data back to Polars DataFrame
+        df = pl.DataFrame(parsed_data)
+
+        # Get category mapping
+        categories = db.get_categories()
+        category_map = {cat.name.lower(): cat.id for cat in categories}
+
+        # Collect unique category names from import
+        unique_categories = set()
+        for row in df.iter_rows(named=True):
+            category_name = str(row['category']).strip()
+            if category_name:
+                unique_categories.add(category_name)
+
+        # Auto-create missing categories
+        new_categories_created = []
+        for category_name in unique_categories:
+            if category_name.lower() not in category_map:
+                # Create new category
+                new_category = Category(
+                    id=str(uuid.uuid4()),
+                    name=category_name,
+                    parent_id=None,  # Top-level category
+                )
+                db.insert_category(new_category)
+                category_map[category_name.lower()] = new_category.id
+                new_categories_created.append(category_name)
+                print(f"[Import Rules] Created new category: {category_name}")
+
+        # Create Rule objects
+        rules = []
+        for row in df.iter_rows(named=True):
+            pattern = str(row['pattern']).strip()
+            category_name = str(row['category']).strip()
+            priority = int(row['priority']) if row['priority'] else 10
+
+            # Map category name to ID (now all categories should exist)
+            category_id = category_map.get(category_name.lower())
+            if not category_id:
+                print(f"[Import Rules] Warning: Skipping rule for unknown category: {category_name}")
+                continue
+
+            rule = Rule(
+                pattern=pattern,
+                category_id=category_id,
+                priority=priority,
+            )
+            rules.append(rule)
+
+        # Execute import based on mode
+        if mode == 'replace':
+            count = db.replace_all_rules(rules)
+            message_parts = [
+                html.H5("✓ Rules Replaced Successfully", className="alert-heading"),
+                html.P(f"Deleted all existing rules and imported {count} new rules."),
+            ]
+            if new_categories_created:
+                message_parts.append(html.P(f"Created {len(new_categories_created)} new categories: {', '.join(new_categories_created[:5])}" +
+                                           (f" (and {len(new_categories_created)-5} more)" if len(new_categories_created) > 5 else ""),
+                                           className="mb-0 small text-muted"))
+            message = dbc.Alert(message_parts, color="success")
+        else:  # append
+            inserted, skipped = db.import_rules(rules)
+            message_parts = [
+                html.H5("✓ Rules Imported Successfully", className="alert-heading"),
+                html.P(f"Inserted: {inserted} rules | Skipped: {skipped} duplicates"),
+            ]
+            if new_categories_created:
+                message_parts.append(html.P(f"Created {len(new_categories_created)} new categories: {', '.join(new_categories_created[:5])}" +
+                                           (f" (and {len(new_categories_created)-5} more)" if len(new_categories_created) > 5 else ""),
+                                           className="mb-0 small text-muted"))
+            message = dbc.Alert(message_parts, color="success")
+
+        print(f"[Import Rules] Mode: {mode}, Imported: {len(rules)} rules, Created: {len(new_categories_created)} categories")
+
+        # Close modal and refresh table
+        return message, False, 1
+
+    except Exception as e:
+        print(f"[Import Rules] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Error importing rules: {str(e)}", color="danger"), dash.no_update, dash.no_update
 
 
 @callback(
@@ -2233,16 +2842,25 @@ def save_inline_category_change(n_clicks, rule_id, new_category, table_data):
     Output('duplicates-table-container', 'children'),
     Output('duplicates-count', 'children'),
     Input('btn-refresh-duplicates', 'n_clicks'),
+    State('selected-account', 'data'),
     prevent_initial_call=False,
 )
-def load_duplicates_table(n_clicks):
+def load_duplicates_table(n_clicks, selected_account):
     """Load and display potential duplicates."""
     try:
         # Get pending duplicates
-        duplicates = db.get_potential_duplicates(include_resolved=False)
+        all_duplicates = db.get_potential_duplicates(include_resolved=False)
+
+        # Filter by account
+        if selected_account:
+            duplicates = [d for d in all_duplicates if d.account_number == selected_account]
+            account_label = selected_account
+        else:
+            duplicates = all_duplicates
+            account_label = "All Accounts"
 
         if len(duplicates) == 0:
-            return dbc.Alert("✓ No pending duplicates to review!", color="success"), html.Span(f"Pending: 0", className="text-success")
+            return dbc.Alert(f"✓ No pending duplicates for {account_label}!", color="success"), html.Span(f"Pending: 0", className="text-success")
 
         # Build table data
         table_data = []
@@ -2484,6 +3102,44 @@ def execute_purge(confirm_click):
 
     except Exception as e:
         return dbc.Alert(f"Error: {str(e)}", color="danger"), False
+
+
+# ============================================================================
+# Account Selector Callbacks
+# ============================================================================
+
+@callback(
+    Output('account-selector', 'options'),
+    Output('account-selector', 'value'),
+    Input('account-selector', 'id'),
+)
+def populate_account_dropdown(_):
+    """Populate account dropdown from database."""
+    try:
+        accounts = db.get_unique_accounts()
+
+        options = [{'label': '📊 All Accounts', 'value': ""}]
+
+        for account_number, account_name in accounts:
+            options.append({
+                'label': f"{account_name} ({account_number})",
+                'value': account_number
+            })
+
+        return options, ""
+    except Exception as e:
+        print(f"Error populating accounts: {e}")
+        return [{'label': '📊 All Accounts', 'value': ""}], ""
+
+
+@callback(
+    Output('selected-account', 'data'),
+    Input('account-selector', 'value'),
+)
+def sync_account_selection(selected_account):
+    """Sync account selector to dcc.Store for use by all tabs."""
+    # Convert empty string to None for database compatibility
+    return None if selected_account == "" else selected_account
 
 
 # ============================================================================

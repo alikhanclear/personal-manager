@@ -1,0 +1,21 @@
+pattern,category,priority
+CO-OP,Supermarket,10
+"M&S, LONDON",Shopping,10
+APPLE.COM/BILL,Subscriptions,10
+BOOTS (UK),Pharmacy,10
+"H&M",Clothing,10
+PRET-A-MANGER,Coffee/Tea,10
+AMAZON.CO.UK,Shopping,8
+PAYPAL *SPOTIFY,Streaming Services,10
+MARKS & SPENCER,Shopping,10
+EDF-ENERGY,Utilities,10
+BT.COM/BILL,Internet,10
+SKY.COM,Subscriptions,9
+"NEXT (RETAIL)",Clothing,10
+JOHN-LEWIS,Shopping,9
+CAFFE-NERO,Coffee/Tea,10
+DELIVEROO.CO.UK,Dining Out,9
+JUST-EAT,Dining Out,9
+UBER.COM,Transport,9
+TRAINLINE.COM,Public Transport,10
+NETFLIX.COM,Streaming Services,10

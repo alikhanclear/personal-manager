@@ -587,6 +587,103 @@ AMAZON,Shopping,5
 
 ---
 
+## 🚨 NEXT SESSION - START HERE FIRST! 🚨
+
+**Date**: November 25, 2025
+**CRITICAL PRIORITY**: Regression Testing & Progress Window Completion
+
+### ⚠️ MUST DO BEFORE ANY NEW WORK:
+**The user does NOT want to break existing functionality. Regression testing is CRITICAL.**
+
+### Session Goals:
+1. **REGRESSION TEST EVERYTHING** (highest priority)
+   - Test transaction upload (CSV import)
+   - Test transaction type categorization (INT/CHG → Interest and Charges)
+   - Test rule matching
+   - Test AI categorization (verify it doesn't overwrite rule-matched transactions)
+   - Test Excel export with Status column
+   - Test manual categorization in Review & Correct tab
+   - Test rule import/export
+   - Verify all existing features work as before
+
+2. **Complete Progress Window Implementation** (only after regression tests pass)
+   - Add callbacks to show/hide progress modal
+   - Wire up progress polling with dcc.Interval
+   - Connect progress tracker to UI updates
+   - Test progress window during AI categorization
+
+### Work Already Completed (Nov 25, 2025):
+✅ **Transaction Type Categorization**
+- Added INT/CHG → "Interest and Charges" categorization
+- This is now the HIGHEST priority (Step 0, before rules)
+- Files: `src/core/categorizer.py`
+
+✅ **AI Protection**
+- Dual-layer protection to prevent AI from overwriting rule-matched transactions
+- Filter in `app.py` (line 910-915)
+- Skip logic in `categorizer.py` (line 186-194)
+
+✅ **Excel Export Enhancement**
+- Added "Status" column showing: Confirmed, Rule Matched, AI Suggested, Uncategorized
+- File: `app.py` (export function)
+
+✅ **Progress Window Infrastructure (90% complete)**
+- `src/utils/progress_tracker.py` - JSON-based progress tracking
+- Progress modal UI in `app.py` (lines 702-734)
+- `dcc.Interval` component for polling
+- Progress updates in `categorizer.py`
+- **REMAINING**: Callbacks to wire it all together
+
+### Files Modified in This Session:
+1. `app.py` - Added Status column to export, AI protection filter, progress modal UI
+2. `src/core/categorizer.py` - Transaction type check, AI protection, progress tracking
+3. `src/utils/progress_tracker.py` - NEW FILE (progress tracking system)
+4. `scripts/add_interest_charges_category.py` - NEW FILE (utility)
+
+### Testing Checklist for Next Session:
+- [ ] Upload test CSV file
+- [ ] Verify INT/CHG transactions auto-categorize
+- [ ] Apply rules - verify they work
+- [ ] Run AI categorization - verify it doesn't overwrite rules
+- [ ] Export to Excel - verify Status column exists
+- [ ] Manually edit categories in Review & Correct
+- [ ] Test all tabs work without errors
+
+**REMEMBER**: User priority is stability over new features. Test thoroughly!
+
+---
+
+## 🚨 Session: Nov 29, 2025 - Regression Testing Infrastructure
+
+**Status**: Regression testing **DEFERRED** but infrastructure ready
+
+**What Was Built:**
+- ✅ Test database creation script: `scripts/init_test_database.py`
+- ✅ Data copy script: `scripts/copy_categories_rules_to_test.py`
+- ✅ Fresh test database: `data/finance_test.db` (67 categories, 120 rules)
+- ✅ Comprehensive test CSV: `regression_test.csv` (20 transactions with INT/CHG types)
+- ✅ Documented testing procedure
+
+**How to Run Regression Tests (When Ready):**
+1. `python scripts/init_test_database.py` - Create fresh test DB
+2. `python scripts/copy_categories_rules_to_test.py` - Copy categories/rules
+3. Modify `app.py` line 40: `finance.db` → `finance_test.db`
+4. Run tests with `regression_test.csv`
+5. Restore `app.py` to use `finance.db`
+
+**Test Coverage Needed:**
+- [ ] CSV upload functionality
+- [ ] INT/CHG auto-categorization
+- [ ] Rule-based matching (token-based)
+- [ ] AI categorization doesn't overwrite rules
+- [ ] Excel export with Status column
+- [ ] Manual categorization in Review & Correct
+- [ ] All tabs load without errors
+
+**Decision**: User wants to **complete the build first**, regression testing later.
+
+---
+
 **Git Repository**: Private repo `personal-finance-fresh`
 **Database**: `data/finance.db` (SQLite)
 **Server**: http://localhost:8050/
