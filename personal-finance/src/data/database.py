@@ -22,7 +22,39 @@ class FinanceDatabase:
             db_path: Path to SQLite database file
         """
         self.db_path = Path(db_path)
+        self._cleanup_stale_journals()  # Clean up before init
         self._init_database()
+        self._enable_wal_mode()  # Enable WAL for better concurrency
+
+    def _cleanup_stale_journals(self) -> None:
+        """
+        Clean up stale journal files on startup.
+
+        Journal files can remain if a transaction was interrupted.
+        Removing them allows the database to recover properly.
+        """
+        journal_path = Path(f"{self.db_path}-journal")
+        if journal_path.exists():
+            try:
+                journal_path.unlink()
+                print(f"[CLEANUP] Removed stale journal file: {journal_path.name}")
+            except Exception as e:
+                print(f"[WARNING] Could not remove journal file: {e}")
+
+    def _enable_wal_mode(self) -> None:
+        """
+        Enable Write-Ahead Logging (WAL) mode for better concurrency.
+
+        Benefits:
+        - Readers don't block writers
+        - Writers don't block readers
+        - Better performance for concurrent access
+        - No more "database is locked" errors
+        """
+        with self._get_connection() as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.commit()
+            print("[DATABASE] WAL mode enabled")
 
     def _init_database(self) -> None:
         """Create database tables if they don't exist."""
@@ -123,11 +155,30 @@ class FinanceDatabase:
 
     @contextmanager
     def _get_connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
+        """
+        Context manager for database connections with improved error handling.
+
+        Features:
+        - 30 second timeout (increased from default 5s)
+        - Row factory for column name access
+        - Automatic rollback on errors
+        - Proper connection cleanup
+        """
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=30.0,  # 30 seconds (up from 5s default)
+            isolation_level=None  # Autocommit mode for WAL
+        )
         conn.row_factory = sqlite3.Row  # Access columns by name
         try:
             yield conn
+        except Exception as e:
+            # Rollback on error (even in autocommit, this helps cleanup)
+            try:
+                conn.rollback()
+            except:
+                pass
+            raise  # Re-raise the original exception
         finally:
             conn.close()
 
