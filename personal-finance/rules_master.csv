@@ -16,25 +16,26 @@ INTERACTIVE INVEST,Investments,15
 HMRC NDDS,Debt repayment,15
 GOCARDLESS,Charity,15
 GIFFGAFF,Phone,15
-CREATION.CO.UK,Debt repayment,15
+CREATION,Debt repayment,15
 COMPANIESHOUSE,Clearthread,15
 COMMUNITYFIBRE,Broadband,15
 CLEARTHREAD STARLI,Clearthread,15
 BLUE SQUARE OFFICE,Clearthread,15
-AMAZON,Shopping,15
 ADVANTIS CREDIT L,Debt repayment,15
+tayyabs,Entertainment,10
+skool.com,Tech Spend,10
+baitulmaal,Charity,10
 ZETTLE,Dining Out,10
 ZETEO,Education,10
 ZARA,Clothing,10
 YOURPARKINGSPACE,Parking,10
 YOURPARKING,Parking,10
 YALLOP,Dining Out,10
-WWW.F1.COM,Entertainment,10
-WWW.BIKECLUB.COM,Ayyub,10
-WWW.AMAZON,Shopping,10
+WWW AMAZON,Shopping,10
 WORLD CARE,Charity,10
 WOOD STREET SUPERMARKE,Groceries,10
 WOOD STREET,Groceries,10
+WISPR,Tech Spend,10
 WING STOP,Dining Out,10
 WHITE COMPANY,Shopping,10
 WH SMITH,Shopping,10
@@ -78,7 +79,6 @@ TARIQ HALAL MEAT,Groceries,10
 TACO AND BUNS,Dining Out,10
 SUPERDRUG,Pharmacy,10
 SUMUP *SHA MINI,Other,10
-SUMUP *NOVA.SOL,Shopping,10
 SUMUP *MATW,Shopping,10
 SUMUP *JAMME,Dining Out,10
 SUMUP *EVER READY,Vacation,10
@@ -104,7 +104,7 @@ SQ *CHAI GUYS,Dining Out,10
 SQ *CAFE RASA,Dining Out,10
 SQ *BURNT,Dining Out,10
 SPOTIFY,Streaming Services,10
-SPORTSDIRECT.COM,Clothing,10
+SPORTSDIRECT,Clothing,10
 SPAR,Groceries,10
 SP TIGO SPORT,Entertainment,10
 SP PREPPED,Shopping,10
@@ -115,6 +115,7 @@ SHELL,Fuel/Petrol,10
 SHAKE SHACK,Dining Out,10
 SELECTA,Fast Food,10
 SE ONLINE WEB,Other,10
+SCREWFIX,Home Maintenance,10
 SCOTTISH POWER,Utilities,10
 SCOTMID,Groceries,10
 SCOTCH CORNER,Public Transport,10
@@ -152,14 +153,16 @@ OLD STABLES,Dining Out,10
 OAKHILL SERVICE,Fuel/Petrol,10
 O2,Phone,10
 NOW 6D189 ENTERTAI,Entertainment,10
+NOVA,Shopping,10
 NISA,Groceries,10
-NIF.ORG,Charity,10
+NIF,Charity,10
 NEXT RETAIL,Clothing,10
 NETFLIX,Streaming Services,10
 NATIONAL RAIL,Public Transport,10
 NANDO,Restaurants,10
 NAGINA RESTAURANT,Dining Out,10
 MUNCHEEZ,Dining Out,10
+MUM LIKES THAI,Entertainment,10
 MS Z R BEGUM,Transfers,10
 MOTO SAWTRY,Fuel/Petrol,10
 MORRISONS,Groceries,10
@@ -176,6 +179,7 @@ MANUAL,Other,10
 MANNYS OF LONDON,Personal Care,10
 MADE IN PORTUGAL,Vacation,10
 M&S SIMPLY FOOD,Groceries,10
+LONDON BOROUGH OF WALT,Council Tax,10
 LNER,Public Transport,10
 LIVERPOOL ST,Public Transport,10
 LIDL,Groceries,10
@@ -219,12 +223,14 @@ FLOWERS AND PLANTS,Gifts,10
 FIRST GLASGOW,Public Transport,10
 FEDEX,Other,10
 FAIZAN HALAL MEAT,Groceries,10
+F1,Entertainment,10
 ESSO,Fuel/Petrol,10
 ELIF,Groceries,10
 EG ON THE MOVE,Public Transport,10
 EDF ENERGY,Utilities,10
 EASYJET,Airlines,10
 DUPLICATE REVERSAL,Other,10
+DUDLEYS,Entertainment,10
 DNR 17,Dining Out,10
 DIXY,Dining Out,10
 DFF&V,Groceries,10
@@ -238,7 +244,7 @@ COMPANY SEARCHES,Shopping,10
 CO-OP,Groceries,10
 CO OP MEMBERSHIP,Other,10
 CLEARTHREAD ANALYT,Clearthread,10
-CLAUDE.AI,Tech Spend,10
+CLAUDE,Tech Spend,10
 CLARKSTON,Groceries,10
 CLAPTON SERVICE,Fuel/Petrol,10
 CITI-OLIVER'S,Dining Out,10
@@ -246,11 +252,12 @@ CHILOS BURGERS,Dining Out,10
 CHICOS,Dining Out,10
 CHICKEN SHOP,Dining Out,10
 CHAIIWALA DALSTON,Dining Out,10
-CDKEYS.COM,Tech Spend,10
+CDKEYS,Tech Spend,10
 CARTRIDGE SAVE,Tech Spend,10
 CARD FACTORY,Gifts,10
 CANARY WHARF CARPA,Dining Out,10
 CANARY WHARF,Other,10
+CAIR FOUNDATION,Charity,10
 CAFFE NERO,Coffee/Tea,10
 BURGER KING,Fast Food,10
 BUN & BASE,Dining Out,10
@@ -261,25 +268,27 @@ BRIM BURGERS,Dining Out,10
 BP,Fuel/Petrol,10
 BOOTS,Pharmacy,10
 BOLT,Public Transport,10
+BOLT,Public Transport,10
 BMACH,Cash,10
+BIKECLUB,Ayyub,10
 BEIOGLU DOLAPDERE,Vacation,10
 BAYER FOOD CENTRE,Groceries,10
 BADDOW RD COOP,Groceries,10
 AWS,Tech Spend,10
 ASDA,Groceries,10
-APPLE.COM/BILL,Subscriptions,10
+APPLE,Subscriptions,10
 APCOA,Parking,10
 ANTHROPIC,Tech Spend,10
+AMAZON.CO.U,Shopping,10
 AMAZON UK,Shopping,10
 AMAZON PRIME,Subscriptions,10
+AMAZON,Shopping,10
 ALMAS,Dining Out,10
 ALDI,Groceries,10
 AAVO CHAI,Dining Out,10
 365 RM (UK),Other,10
 ZINATH COOP,Transfers,5
 XERO UK,Clearthread,5
-WWW.IQBALNASIM.COM,Charity,5
-WWW.ARABIC-  STUDIO.COM,Education,5
 WOODFORD SERVICE,Car,5
 UMMAH WELFARE TRUS,Charity,5
 To A/C,Transfers,5
@@ -299,6 +308,7 @@ LAUNCHGOOD,Charity,5
 JOHN LEWIS,Shopping,5
 JAAFAR KARKOUR,Other,5
 ISLAMIC RELIEF - L,Charity,5
+IQBALNASIM,Charity,5
 "HIGHAM HILL , MUSLIM",Charity,5
 GOFNDME,Charity,5
 GAZA,Charity,5
@@ -312,12 +322,13 @@ Cuppers limited,Health,5
 Charity,Charity,5
 CITIGROUP MAIN,Lunch,5
 CHUFFED,Charity,5
-BNA.CO.UK,Other,5
+BNA,Other,5
 BIKE CLUB LTD,Ayyub,5
 ASDA FUEL,Fuel/Petrol,5
 ARGOS,Shopping,5
+ARABIC-  STUDIO,Education,5
 AMZN MKTP,Shopping,5
 AMERICAN EXPRESS,Debt repayment,5
-AMAZON.CO.UK,Shopping,5
+AMAZON CO UK,Shopping,5
 AIRBNB,Vacation,5
 "AHMED ALIKHAN , INVESTMENT",Transfers,5

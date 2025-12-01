@@ -46,19 +46,20 @@ class RuleEngine:
         """
         Check if description matches pattern using WHOLE-WORD token matching.
 
-        NEW LOGIC (Nov 29, 2025 - Fixed trailing punctuation bug):
+        NEW LOGIC (Dec 1, 2025 - Added dot as delimiter):
         - Tokenizes both description and pattern into words
         - Pattern must match as complete words/tokens (not substrings)
-        - Delimiters: ONLY space and asterisk (*)
+        - Delimiters: space, asterisk (*), and dot (.)
         - Strips trailing punctuation from description tokens when comparing
-        - Preserves: hyphens, dots, slashes in middle of words (e.g., "CO-OP", "APPLE.COM/BILL")
+        - Preserves: hyphens, slashes in middle of words (e.g., "CO-OP", "COM/BILL")
 
         Examples:
-          Pattern "NETFLIX" matches "PAYPAL *NETFLIX" ✓ (NETFLIX is a whole word)
+          Pattern "NETFLIX" matches "PAYPAL *NETFLIX.COM" ✓ (NETFLIX is a token after dot split)
           Pattern "TFL" does NOT match "NETFLIX" ✗ (TFL is inside NETFLIX)
           Pattern "TFL" matches "TFL TRAVEL" ✓ (TFL is a whole word)
+          Pattern "BOLT" matches "BOLT.EUO2511021744" ✓ (dot is now a delimiter)
           Pattern "CO-OP" matches "CO-OP FOOD" ✓ (hyphen preserved)
-          Pattern "APPLE.COM/BILL" matches exactly ✓ (dot and slash preserved)
+          Pattern "APPLE" matches "APPLE.COM/BILL" ✓ (dot splits tokens)
           Pattern "CLEARTHREAD STARLI" matches "CLEARTHREAD STARLI, INITIAL PAYMENT" ✓ (comma ignored)
           Pattern "FOA PEACE IN PALESTINE" matches "FOA PEACE IN , PALESTINE , LEICESTER" ✓ (commas ignored)
 
@@ -74,9 +75,9 @@ class RuleEngine:
         pattern_upper = pattern.upper().strip()
 
         # Tokenize description into words using MINIMAL delimiters
-        # Delimiters: ONLY space (whitespace) and asterisk (bank separator)
-        # This preserves: hyphens, commas, dots, slashes, ampersands, parentheses, etc.
-        description_tokens = re.split(r'[\s*]+', description.upper())
+        # Delimiters: space (whitespace), asterisk (bank separator), and dot (domain separator)
+        # This preserves: hyphens, commas, slashes, ampersands, parentheses, etc.
+        description_tokens = re.split(r'[\s*\.]+', description.upper())
 
         # Remove empty tokens
         description_tokens = [t for t in description_tokens if t]
@@ -95,7 +96,7 @@ class RuleEngine:
 
         # Check if pattern appears as a complete token
         # Pattern can be multi-word (e.g., "AMAZON PRIME")
-        pattern_tokens = re.split(r'[\s*]+', pattern_upper)
+        pattern_tokens = re.split(r'[\s*\.]+', pattern_upper)
         pattern_tokens = [t for t in pattern_tokens if t]
 
         # If single-word pattern, check if it's in description tokens
