@@ -119,9 +119,9 @@ class RuleEngine:
         pattern_upper = pattern.upper().strip()
 
         # Tokenize description into words using MINIMAL delimiters
-        # Delimiters: space (whitespace), asterisk (bank separator), and dot (domain separator)
+        # Delimiters: space (whitespace), asterisk (bank separator), dot (domain separator), underscore
         # This preserves: hyphens, commas, slashes, ampersands, parentheses, etc.
-        description_tokens = re.split(r'[\s*\.]+', description.upper())
+        description_tokens = re.split(r'[\s*\._]+', description.upper())
 
         # Remove empty tokens
         description_tokens = [t for t in description_tokens if t]
@@ -150,7 +150,7 @@ class RuleEngine:
 
         # Check if pattern appears as a complete token
         # Pattern can be multi-word (e.g., "AMAZON PRIME")
-        pattern_tokens = re.split(r'[\s*\.]+', pattern_upper)
+        pattern_tokens = re.split(r'[\s*\._]+', pattern_upper)
         pattern_tokens = [t for t in pattern_tokens if t]
 
         # Apply same smart alphanumeric splitting to pattern tokens

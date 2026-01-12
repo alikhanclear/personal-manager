@@ -552,20 +552,56 @@ class FinanceDatabase:
 
         return len(rules)
 
-    def delete_all_transactions(self) -> int:
+    def delete_all_transactions(self, account_number: Optional[str] = None) -> dict:
         """
-        Delete ALL transactions from database (preserves categories and rules).
+        Delete transactions from database (preserves categories and rules).
+
+        Args:
+            account_number: Optional account number to filter by.
+                           If None, deletes ALL transactions (dangerous!)
+                           If provided, only deletes transactions for that account
 
         Returns:
-            Number of transactions deleted
+            Dictionary with deletion counts:
+            {
+                'transactions': int,  # Number of transactions deleted
+                'duplicates': int     # Number of potential duplicates deleted
+            }
+
+        Example:
+            # Delete transactions for specific account
+            result = db.delete_all_transactions('12345678')
+            # result = {'transactions': 523, 'duplicates': 12}
+
+            # Delete ALL transactions (use with caution!)
+            result = db.delete_all_transactions()
+            # result = {'transactions': 5230, 'duplicates': 120}
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM transactions")
-            count = cursor.fetchone()[0]
-            cursor.execute("DELETE FROM transactions")
+
+            # Build WHERE clause for account filtering
+            where_clause = "WHERE account_number = ?" if account_number else ""
+            params = [account_number] if account_number else []
+
+            # Count transactions to be deleted
+            cursor.execute(f"SELECT COUNT(*) FROM transactions {where_clause}", params)
+            txn_count = cursor.fetchone()[0]
+
+            # Count duplicates to be deleted
+            cursor.execute(f"SELECT COUNT(*) FROM potential_duplicates {where_clause}", params)
+            dup_count = cursor.fetchone()[0]
+
+            # Delete from both tables
+            cursor.execute(f"DELETE FROM transactions {where_clause}", params)
+            cursor.execute(f"DELETE FROM potential_duplicates {where_clause}", params)
+
             conn.commit()
-        return count
+
+        return {
+            'transactions': txn_count,
+            'duplicates': dup_count
+        }
 
     # ==================== POTENTIAL DUPLICATE OPERATIONS ====================
 
@@ -763,3 +799,70 @@ class FinanceDatabase:
             rows = cursor.fetchall()
 
         return [(row['account_number'], row['account_name']) for row in rows]
+
+    def get_latest_transaction_per_account(self) -> List[dict]:
+        """
+        Get earliest and latest transaction dates for each account.
+
+        This helps users understand the full date range of their data
+        before importing new CSV files, enabling smarter import workflow
+        and minimizing duplicate reviews.
+
+        Returns:
+            List of dicts with account info and transaction date range:
+            [
+                {
+                    'account_name': 'Current Account',
+                    'account_number': '12345678',
+                    'earliest_date': '2024-01-01',  # ISO format date string
+                    'latest_date': '2025-01-15',  # ISO format date string
+                    'transaction_count': 1523
+                },
+                ...
+            ]
+
+        Example:
+            >>> db.get_latest_transaction_per_account()
+            [
+                {
+                    'account_name': 'Current Account',
+                    'account_number': '12345678',
+                    'earliest_date': '2024-01-01',
+                    'latest_date': '2025-01-15',
+                    'transaction_count': 1523
+                },
+                {
+                    'account_name': 'Savings Account',
+                    'account_number': '87654321',
+                    'earliest_date': '2024-01-05',
+                    'latest_date': '2025-01-10',
+                    'transaction_count': 245
+                }
+            ]
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    account_name,
+                    account_number,
+                    MIN(date) as earliest_date,
+                    MAX(date) as latest_date,
+                    COUNT(*) as transaction_count
+                FROM transactions
+                WHERE account_number IS NOT NULL
+                GROUP BY account_name, account_number
+                ORDER BY account_name
+            """)
+
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'account_name': row['account_name'],
+                    'account_number': row['account_number'],
+                    'earliest_date': row['earliest_date'],
+                    'latest_date': row['latest_date'],
+                    'transaction_count': row['transaction_count']
+                })
+
+            return results

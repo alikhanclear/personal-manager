@@ -12,7 +12,21 @@
       "Bash(ping:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(sqlite3:*)",
+      "Bash(tasklist:*)",
+      "Bash(del datafinance.db-journal)",
+      "Bash(taskkill /F /PID 29788)",
+      "Bash(cat:*)",
+      "Bash(taskkill:*)",
+      "Bash(del update_pdf_export.py pdf_export_callback.py temp_update_charts.py)",
+      "Bash(cmd.exe /c \"taskkill /F /IM python.exe\")",
+      "Bash(find:*)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 74724 & taskkill /F /PID 64452\")",
+      "Bash(powershell -Command \"Stop-Process -Id 74724 -Force; Stop-Process -Id 64452 -Force\")",
+      "Bash(del temp_pdf_fix.py pdf_export_callback.py update_pdf_export.py temp_update_charts.py)",
+      "Bash(del:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

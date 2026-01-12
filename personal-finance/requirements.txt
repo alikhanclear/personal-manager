@@ -29,3 +29,6 @@ anthropic>=0.39.0  # Claude Haiku/Sonnet/Opus API (RECOMMENDED)
 
 # Utilities
 python-dotenv>=1.0.0  # Environment variables
+
+# PDF Export
+matplotlib>=3.7.0  # For direct PDF generation (no location tracking)

@@ -49,11 +49,14 @@ class Transaction(BaseModel):
         """Generate deterministic ID from transaction properties if not already set."""
         if not self.id:
             # Create unique string from transaction properties
-            # Uses: date + description + amount + account_number
+            # Uses: date + description + amount + balance + account_number
+            # INCLUDING BALANCE ensures multiple transactions on same day with same amount
+            # are treated as separate transactions (not duplicates) if they have different balances
             unique_string = (
                 f"{self.date.isoformat()}|"
                 f"{self.description}|"
                 f"{str(self.amount)}|"
+                f"{str(self.balance)}|"
                 f"{self.account_number}"
             )
             # Generate MD5 hash (deterministic - same input = same output)

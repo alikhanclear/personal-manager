@@ -22,6 +22,8 @@ import dash
 from dash import dcc, html, dash_table, Input, Output, State, callback, ALL, ctx
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
+import tkinter as tk
+from tkinter import filedialog
 import polars as pl
 import pandas as pd
 
@@ -97,6 +99,28 @@ app.index_string = '''
             /* Alternative dropdown class */
             .dash-dropdown {
                 z-index: 9999 !important;
+            }
+            /* Change cursor to pointer for clickable chart elements */
+            #income-chart, #expense-chart {
+                cursor: pointer !important;
+            }
+            #income-chart .js-plotly-plot, #expense-chart .js-plotly-plot {
+                cursor: pointer !important;
+            }
+            #income-chart .plotly .main-svg, #expense-chart .plotly .main-svg {
+                cursor: pointer !important;
+            }
+            #income-chart .nsewdrag, #expense-chart .nsewdrag {
+                cursor: pointer !important;
+            }
+            #income-chart svg, #expense-chart svg {
+                cursor: pointer !important;
+            }
+            #income-chart .barlayer path, #expense-chart .barlayer path {
+                cursor: pointer !important;
+            }
+            #income-chart .plot .barlayer .point path, #expense-chart .plot .barlayer .point path {
+                cursor: pointer !important;
             }
         </style>
     </head>
@@ -205,11 +229,18 @@ def create_layout():
 
         # Store for selected account (persists across tabs)
         dcc.Store(id='selected-account', data=None),
+        dcc.Store(id='export-folder-path', data=None),
+
+        # Location component for page load detection
+        dcc.Location(id='url', refresh=False),
 
         # Tabs
         dbc.Tabs([
             # Import & Categorize Tab
             dbc.Tab(label="📥 Import & Categorize", children=[
+
+                # Account Status Section
+                html.Div(id='account-status-section', className="mt-3 mb-3"),
 
                 # Step 1: Upload
                 dbc.Card([
@@ -226,7 +257,7 @@ def create_layout():
                             multiple=False
                         ),
 
-                        html.Div(id='upload-status', className="mt-3"),
+                        html.Div(id='upload-status', children="", className="mt-3"),
                     ])
                 ], className="mt-3 mb-3"),
 
@@ -501,6 +532,108 @@ def create_layout():
                 html.Div(id='stats-content', className="mt-3"),
             ]),
 
+            # Analytics Tab
+            dbc.Tab(label="📈 Analytics", children=[
+                dbc.Row([
+                    dbc.Col([
+                        html.H4("Monthly Spending Analysis", className="mt-3 mb-3"),
+                        html.P("Click on any bar to see detailed transactions for that category", className="text-muted"),
+                    ], width=12),
+                ]),
+
+                # Controls
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Select Month:", className="fw-bold mb-2"),
+                        dcc.Dropdown(
+                            id='analytics-month-selector',
+                            placeholder="Select a month...",
+                            clearable=False,
+                        ),
+                    ], width=4),
+                    dbc.Col([
+                        dbc.Button(
+                            "🔄 Refresh",
+                            id="btn-refresh-analytics",
+                            color="secondary",
+                            size="sm",
+                            className="mt-4",
+                        ),
+                    ], width=2),
+                    dbc.Col([
+                        dbc.Button(
+                            "📄 Export to PDF",
+                            id="btn-export-pdf",
+                            color="primary",
+                            size="sm",
+                            className="mt-4",
+                        ),
+                        dcc.Download(id="download-analytics-pdf"),
+                    ], width=2),
+                    dbc.Col([
+                        dbc.Button(
+                            "📁 Choose Export Folder",
+                            id="btn-choose-folder",
+                            color="secondary",
+                            size="sm",
+                            className="mt-4",
+                        ),
+                        html.Div(id="folder-path-display", className="mt-2 small text-muted"),
+                    ], width=3),
+                ], className="mb-4"),
+
+                # Summary Stats (moved to top)
+                html.Div(id='analytics-summary', className="mb-4"),
+
+                # Two-column layout: Charts (left) + Transaction Details (right)
+                dbc.Row([
+                    # Left: Stacked Charts
+                    dbc.Col([
+                        # Income Chart
+                        dcc.Loading(
+                            id="loading-income",
+                            type="default",
+                            children=dcc.Graph(
+                                id='income-chart',
+                                config={
+                                    'displayModeBar': False,
+                                    'staticPlot': False,
+                                },
+                                style={'cursor': 'pointer'}
+                            ),
+                        ),
+                        
+                        # Expense Chart
+                        dcc.Loading(
+                            id="loading-expense",
+                            type="default",
+                            children=dcc.Graph(
+                                id='expense-chart',
+                                config={
+                                    'displayModeBar': False,
+                                    'staticPlot': False,
+                                },
+                                style={'cursor': 'pointer', 'marginTop': '20px'}
+                            ),
+                        ),
+                    ], width=7),
+
+                    # Right: Transaction Details
+                    dbc.Col([
+                        html.Div(id='analytics-transaction-details', children=[
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.H5("Transaction Details", className="mb-3"),
+                                    html.P("Click on a bar to see transactions",
+                                           className="text-muted text-center",
+                                           style={'padding': '50px 20px'})
+                                ])
+                            ])
+                        ]),
+                    ], width=5),
+                ]),
+            ]),
+
             # Rules Tab
             dbc.Tab(label="📝 Rules", children=[
                 dbc.Row([
@@ -550,8 +683,21 @@ def create_layout():
                             dbc.ModalBody([
                                 dbc.Label("Pattern (text to match in description)"),
                                 dbc.Input(id="new-rule-pattern", placeholder="e.g., NETFLIX, TESCO, TFL", className="mb-3"),
+
                                 dbc.Label("Category"),
-                                dcc.Dropdown(id="new-rule-category", placeholder="Select category...", className="mb-3"),
+                                dbc.Checklist(
+                                    id="new-rule-create-category-toggle",
+                                    options=[{"label": " Create new category", "value": "create"}],
+                                    value=[],
+                                    className="mb-2"
+                                ),
+                                html.Div(id="new-rule-category-container", children=[
+                                    dcc.Dropdown(id="new-rule-category", placeholder="Select category...", className="mb-3"),
+                                ]),
+                                html.Div(id="new-rule-new-category-container", style={"display": "none"}, children=[
+                                    dbc.Input(id="new-rule-new-category-name", placeholder="Enter new category name...", className="mb-3"),
+                                ]),
+
                                 dbc.Label("Priority (optional, default: 10)"),
                                 dbc.Input(id="new-rule-priority", type="number", value=10, className="mb-3"),
                             ]),
@@ -604,7 +750,7 @@ def create_layout():
                         dbc.Row([
                             dbc.Col([
                                 dbc.Button(
-                                    "🗑️ Purge All Transactions",
+                                    "🗑️ Purge Transactions",
                                     id="btn-purge-transactions",
                                     color="danger",
                                     size="sm",
@@ -612,7 +758,7 @@ def create_layout():
                                 ),
                             ], width=3),
                             dbc.Col([
-                                html.Small("⚠️ This will delete ALL transactions but preserve rules and categories", className="text-danger"),
+                                html.Small("⚠️ Deletes transactions & duplicates for selected account (preserves rules/categories)", className="text-danger"),
                             ], width=9),
                         ]),
 
@@ -687,30 +833,11 @@ def create_layout():
 
         # Confirmation Modal for Purge
         dbc.Modal([
-            dbc.ModalHeader(dbc.ModalTitle("⚠️ Confirm Purge All Transactions")),
-            dbc.ModalBody([
-                html.P([
-                    html.Strong("This will permanently delete ALL transactions from the database!"),
-                ], className="text-danger"),
-                html.Hr(),
-                html.P("What will be deleted:"),
-                html.Ul([
-                    html.Li("All transaction records"),
-                    html.Li("All categorization data"),
-                ]),
-                html.P("What will be preserved:"),
-                html.Ul([
-                    html.Li("All rules"),
-                    html.Li("All categories"),
-                ], className="text-success"),
-                html.Hr(),
-                html.P([
-                    html.Strong("Are you sure you want to continue?"),
-                ]),
-            ]),
+            dbc.ModalHeader(dbc.ModalTitle(id="purge-modal-title")),
+            dbc.ModalBody(id="purge-modal-body"),
             dbc.ModalFooter([
                 dbc.Button("Cancel", id="purge-cancel", className="me-2", color="secondary"),
-                dbc.Button("Yes, Delete All Transactions", id="purge-confirm", color="danger"),
+                dbc.Button("Yes, Delete Transactions", id="purge-confirm", color="danger"),
             ]),
         ], id="purge-modal", is_open=False),
 
@@ -766,6 +893,82 @@ app.layout = create_layout
 # ============================================================================
 # Callbacks
 # ============================================================================
+
+@callback(
+    Output('account-status-section', 'children'),
+    [Input('upload-status', 'children'),  # Refresh after upload
+     Input('url', 'pathname')]  # Trigger on page load
+)
+def update_account_status(upload_status, pathname):
+    """
+    Display latest transaction date per account.
+
+    Helps user understand "where they left off" before importing new CSVs,
+    enabling smarter import workflow and minimizing duplicate reviews.
+
+    Triggers on:
+    - Page load (upload_status initialized to None)
+    - After CSV upload (upload_status updates)
+    """
+
+    try:
+        print(f"[DEBUG] update_account_status callback triggered, upload_status={upload_status}")
+
+        # Get account status from database
+        account_status = db.get_latest_transaction_per_account()
+
+        print(f"[DEBUG] account_status query returned {len(account_status) if account_status else 0} accounts")
+
+        if not account_status:
+            # No transactions yet - show info message
+            return html.Div([
+                html.H5("📊 Account Status", className="mb-3"),
+                dbc.Alert(
+                    "No transactions imported yet. Upload your first CSV file below to get started.",
+                    color="info"
+                )
+            ])
+
+        # Build status cards for each account
+        status_cards = []
+        for acc in account_status:
+            card = dbc.Card([
+                dbc.CardBody([
+                    html.H5(acc['account_name'], className="card-title"),
+                    html.P([
+                        html.Strong("Account: "), acc['account_number'], html.Br(),
+                        html.Strong("Earliest Transaction: "), acc['earliest_date'], html.Br(),
+                        html.Strong("Latest Transaction: "), acc['latest_date'], html.Br(),
+                        html.Strong("Total Transactions: "), f"{acc['transaction_count']:,}"
+                    ], className="mb-0")
+                ])
+            ], className="mb-2")
+            status_cards.append(card)
+
+        # Return complete section
+        return html.Div([
+            html.H5("📊 Account Status", className="mb-3"),
+            html.P(
+                "Use this to determine where to start your next CSV import. "
+                "Tip: Import from the latest date shown to catch any late-dated transactions.",
+                className="text-muted small mb-3"
+            ),
+            html.Div(status_cards)
+        ])
+
+    except Exception as e:
+        # Error handling - show warning
+        print(f"[ERROR] update_account_status callback failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return html.Div([
+            html.H5("📊 Account Status", className="mb-3"),
+            dbc.Alert(
+                f"⚠️ Error loading account status: {str(e)}",
+                color="warning"
+            )
+        ])
+
 
 @callback(
     Output('upload-status', 'children'),
@@ -1401,6 +1604,7 @@ def save_rule_edits(current_data, previous_data):
     Output('page-info', 'children'),
     Output('btn-prev-page', 'disabled'),
     Output('btn-next-page', 'disabled'),
+    Output('selected-transaction-ids', 'data', allow_duplicate=True),
     Input('review-filter', 'value'),
     Input('review-page-size', 'value'),
     Input('current-page', 'data'),
@@ -1408,14 +1612,20 @@ def save_rule_edits(current_data, previous_data):
     Input('review-case-insensitive', 'value'),
     State('selected-transaction-ids', 'data'),
     State('selected-account', 'data'),
+    prevent_initial_call=True,
 )
 def update_review_table(filter_value, page_size, current_page, n_clicks, case_insensitive_value, selected_txn_ids, selected_account):
     """Update the review table of transactions with checkboxes for batch operations."""
+    # Check if refresh button was clicked - if so, clear selections
+    ctx = dash.callback_context
+    triggered_id = ctx.triggered_id if ctx.triggered_id else None
+    clear_selections = (triggered_id == 'btn-refresh-review')
+
     # Get all transactions FILTERED BY ACCOUNT
     transactions = db.get_transactions(account_number=selected_account)
 
     if len(transactions) == 0:
-        return dbc.Alert("No transactions found. Import a CSV file first.", color="info"), "", True, True
+        return dbc.Alert("No transactions found. Import a CSV file first.", color="info"), "", True, True, []
 
     # Apply filter
     if filter_value == 'rule_matched':
@@ -1432,7 +1642,7 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
         filtered = transactions
 
     if len(filtered) == 0:
-        return dbc.Alert(f"No transactions match filter: {filter_value}", color="info"), "", True, True
+        return dbc.Alert(f"No transactions match filter: {filter_value}", color="info"), "", True, True, []
 
     # Show ALL filtered transactions (no pagination - fixes search issue)
     display_transactions = filtered
@@ -1483,12 +1693,25 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
     # Create DataFrame
     df = pd.DataFrame(table_data)
 
+    # Create tooltip data to show full descriptions on hover
+    tooltip_data = [
+        {
+            'Description': {'value': txn.description, 'type': 'markdown'}
+        }
+        for txn in display_transactions
+    ]
+
     # Map selected transaction IDs to current page row indices
-    selected_txn_ids = selected_txn_ids or []
-    selected_rows = []
-    for idx, row in enumerate(table_data):
-        if row['transaction_id'] in selected_txn_ids:
-            selected_rows.append(idx)
+    # If refresh button was clicked, clear all selections
+    if clear_selections:
+        selected_txn_ids = []
+        selected_rows = []
+    else:
+        selected_txn_ids = selected_txn_ids or []
+        selected_rows = []
+        for idx, row in enumerate(table_data):
+            if row['transaction_id'] in selected_txn_ids:
+                selected_rows.append(idx)
 
     # Define columns with editability
     # Note: filter_options={'case': 'insensitive'} is set based on toggle
@@ -1516,6 +1739,8 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
         editable=False,  # No inline editing, use modal
         row_selectable='multi',
         selected_rows=selected_rows,
+        tooltip_data=tooltip_data,
+        tooltip_duration=None,  # Tooltip stays visible while hovering
         style_table={
             'overflowX': 'auto',
             'maxHeight': '70vh',  # 70% of viewport height for scrolling
@@ -1599,7 +1824,7 @@ def update_review_table(filter_value, page_size, current_page, n_clicks, case_in
         html.Small("💡 Tip: Select rows using checkboxes, then use batch action buttons above", className="text-muted"),
     ], color="light", className="mb-3")
 
-    return html.Div([summary, table]), page_info, prev_disabled, next_disabled
+    return html.Div([summary, table]), page_info, prev_disabled, next_disabled, selected_txn_ids
 
 
 @callback(
@@ -1775,19 +2000,21 @@ def hide_review_inline_dropdown(n_clicks):
 @callback(
     Output('review-inline-dropdown-container', 'style', allow_duplicate=True),
     Output('batch-action-status', 'children', allow_duplicate=True),
+    Output('btn-refresh-review', 'n_clicks', allow_duplicate=True),
     Input('review-inline-save-btn', 'n_clicks'),
     State('editing-transaction-id', 'data'),
     State('review-inline-category-dropdown', 'value'),
     State('selected-transaction-ids', 'data'),
+    State('btn-refresh-review', 'n_clicks'),
     prevent_initial_call=True,
 )
-def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected_txn_ids):
+def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected_txn_ids, current_refresh_clicks):
     """Save category change when Save button is clicked.
 
     If multiple rows are selected, applies to ALL selected transactions.
     Otherwise, only applies to the clicked transaction.
 
-    NOTE: Does NOT auto-refresh the table. User must click 'Refresh' button manually.
+    NOTE: Auto-refreshes the table immediately after applying changes.
     """
     if n_clicks is None or not clicked_txn_id or not new_category:
         raise PreventUpdate
@@ -1804,18 +2031,17 @@ def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected
                 db.update_transaction_category(txn_id, new_category, confirmed=False, confidence=None)
 
             print(f"[Review Inline] Updated {len(selected_txn_ids)} transactions to '{new_category}'")
-            status_msg = dbc.Badge(f"✓ Updated {len(selected_txn_ids)} transactions to '{new_category}'. Click 'Refresh' to see changes.", color="success")
+            status_msg = dbc.Badge(f"✓ Updated {len(selected_txn_ids)} transactions to '{new_category}'", color="success")
         else:
             # SINGLE MODE: Only update the clicked transaction
             db.update_transaction_category(clicked_txn_id, new_category, confirmed=False, confidence=None)
             print(f"[Review Inline] Single category edit: {clicked_txn_id} -> {new_category}")
-            status_msg = dbc.Badge(f"✓ Category changed to '{new_category}'. Click 'Refresh' to see changes.", color="success")
+            status_msg = dbc.Badge(f"✓ Category changed to '{new_category}'", color="success")
 
         # Flush database to ensure changes are persisted immediately
-        print(f"[Review Inline] Database update complete. User must click 'Refresh' to see changes.")
+        print(f"[Review Inline] Database update complete. Auto-refreshing table...")
 
-        # Hide dropdown WITHOUT triggering refresh
-        # User must manually click 'Refresh' button to see changes
+        # Hide dropdown and trigger auto-refresh
         hidden_style = {
             'position': 'fixed',
             'top': '200px',
@@ -1831,7 +2057,10 @@ def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected
             'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
         }
 
-        return hidden_style, status_msg
+        # Increment refresh button clicks to trigger table refresh
+        new_refresh_clicks = (current_refresh_clicks or 0) + 1
+
+        return hidden_style, status_msg, new_refresh_clicks
 
     except Exception as e:
         print(f"[Review Inline] Error saving category: {e}")
@@ -1844,17 +2073,19 @@ def save_review_category_change(n_clicks, clicked_txn_id, new_category, selected
 @callback(
     Output('batch-action-status', 'children'),
     Output('selected-transaction-ids', 'data', allow_duplicate=True),
+    Output('btn-refresh-review', 'n_clicks', allow_duplicate=True),
     Input('btn-batch-confirm', 'n_clicks'),
     State('selected-transaction-ids', 'data'),
+    State('btn-refresh-review', 'n_clicks'),
     prevent_initial_call=True,
 )
-def batch_confirm(n_clicks, selected_txn_ids):
+def batch_confirm(n_clicks, selected_txn_ids, current_refresh_clicks):
     """Confirm selected transactions in bulk (across all pages).
 
-    NOTE: Does NOT auto-refresh. User must click 'Refresh' button to see changes.
+    NOTE: Auto-refreshes the table immediately after confirming.
     """
     if not selected_txn_ids or len(selected_txn_ids) == 0:
-        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update
+        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update, dash.no_update
 
     try:
         # Confirm each selected transaction by ID
@@ -1865,30 +2096,33 @@ def batch_confirm(n_clicks, selected_txn_ids):
                 db.update_transaction_category(txn_id, txn.category, confirmed=True, confidence=1.0)
                 print(f"[Batch Confirm] {txn_id} -> {txn.category}")
 
-        # Clear selections WITHOUT triggering refresh
-        return dbc.Badge(f"✓ Confirmed {len(selected_txn_ids)} transactions. Click 'Refresh' to update table.", color="success"), []
+        # Clear selections and trigger auto-refresh
+        new_refresh_clicks = (current_refresh_clicks or 0) + 1
+        return dbc.Badge(f"✓ Confirmed {len(selected_txn_ids)} transactions", color="success"), [], new_refresh_clicks
 
     except Exception as e:
         print(f"[Batch Confirm] Error: {e}")
         import traceback
         traceback.print_exc()
-        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update
+        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update, dash.no_update
 
 
 @callback(
     Output('batch-action-status', 'children', allow_duplicate=True),
     Output('selected-transaction-ids', 'data', allow_duplicate=True),
+    Output('btn-refresh-review', 'n_clicks', allow_duplicate=True),
     Input('btn-batch-confirm-rule', 'n_clicks'),
     State('selected-transaction-ids', 'data'),
+    State('btn-refresh-review', 'n_clicks'),
     prevent_initial_call=True,
 )
-def batch_confirm_and_create_rules(n_clicks, selected_txn_ids):
+def batch_confirm_and_create_rules(n_clicks, selected_txn_ids, current_refresh_clicks):
     """Confirm selected transactions and create rules (one per unique pattern).
 
-    NOTE: Does NOT auto-refresh. User must click 'Refresh' button to see changes.
+    NOTE: Auto-refreshes the table immediately after confirming and creating rules.
     """
     if not selected_txn_ids or len(selected_txn_ids) == 0:
-        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update
+        return dbc.Badge("⚠️ No rows selected", color="warning"), dash.no_update, dash.no_update
 
     try:
         categorizer = get_categorizer()
@@ -1933,17 +2167,18 @@ def batch_confirm_and_create_rules(n_clicks, selected_txn_ids):
             except Exception as e:
                 print(f"[Batch Confirm+Rule] Failed to create rule '{pattern}': {e}")
 
-        # Clear selections WITHOUT triggering refresh
+        # Clear selections and trigger auto-refresh
+        new_refresh_clicks = (current_refresh_clicks or 0) + 1
         return dbc.Badge(
-            f"✓ Confirmed {len(selected_txn_ids)} transactions, created {rules_created} rules. Click 'Refresh' to update table.",
+            f"✓ Confirmed {len(selected_txn_ids)} transactions, created {rules_created} rules",
             color="success"
-        ), []
+        ), [], new_refresh_clicks
 
     except Exception as e:
         print(f"[Batch Confirm+Rule] Error: {e}")
         import traceback
         traceback.print_exc()
-        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update
+        return dbc.Badge(f"❌ Error: {str(e)}", color="danger"), dash.no_update, dash.no_update
 
 
 @callback(
@@ -2302,6 +2537,21 @@ def delete_selected_rules(n_clicks, table_data, selected_rows):
 
 
 @callback(
+    Output('new-rule-category-container', 'style'),
+    Output('new-rule-new-category-container', 'style'),
+    Input('new-rule-create-category-toggle', 'value'),
+)
+def toggle_new_category_input(create_new):
+    """Toggle between category dropdown and new category text input."""
+    if 'create' in create_new:
+        # Show text input, hide dropdown
+        return {'display': 'none'}, {'display': 'block'}
+    else:
+        # Show dropdown, hide text input
+        return {'display': 'block'}, {'display': 'none'}
+
+
+@callback(
     Output('modal-add-rule', 'is_open'),
     Output('new-rule-category', 'options'),
     Input('btn-add-rule', 'n_clicks'),
@@ -2334,24 +2584,51 @@ def toggle_add_rule_modal(btn_add, btn_cancel, btn_save, is_open):
     Output('new-rule-pattern', 'value'),
     Output('new-rule-category', 'value'),
     Output('new-rule-priority', 'value'),
+    Output('new-rule-new-category-name', 'value'),
     Input('btn-save-new-rule', 'n_clicks'),
     State('new-rule-pattern', 'value'),
     State('new-rule-category', 'value'),
     State('new-rule-priority', 'value'),
+    State('new-rule-create-category-toggle', 'value'),
+    State('new-rule-new-category-name', 'value'),
     prevent_initial_call=True,
 )
-def save_new_rule(n_clicks, pattern, category_id, priority):
-    """Save a new rule to the database."""
+def save_new_rule(n_clicks, pattern, category_id, priority, create_new, new_category_name):
+    """Save a new rule to the database, optionally creating a new category first."""
     if n_clicks is None:
         raise PreventUpdate
 
     try:
         # Validation
         if not pattern or not pattern.strip():
-            return dbc.Alert("Error: Pattern cannot be empty", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dbc.Alert("Error: Pattern cannot be empty", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-        if not category_id:
-            return dbc.Alert("Error: Please select a category", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        # Check if we're creating a new category
+        if 'create' in create_new:
+            # Validate new category name
+            if not new_category_name or not new_category_name.strip():
+                return dbc.Alert("Error: Please enter a category name", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+            # Check if category already exists
+            existing_categories = db.get_categories()
+            category_name_lower = new_category_name.strip().lower()
+            existing_category = next((cat for cat in existing_categories if cat.name.lower() == category_name_lower), None)
+
+            if existing_category:
+                # Use existing category
+                category_id = existing_category.id
+                print(f"[Add Rule] Using existing category: '{existing_category.name}' (ID: {category_id})")
+            else:
+                # Create new category
+                from src.data.models import Category
+                new_category = Category(name=new_category_name.strip())
+                db.insert_category(new_category)
+                category_id = new_category.id
+                print(f"[Add Rule] Created new category: '{new_category_name}' (ID: {category_id})")
+        else:
+            # Using existing category
+            if not category_id:
+                return dbc.Alert("Error: Please select a category", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Create new rule
         from src.data.models import Rule
@@ -2373,13 +2650,13 @@ def save_new_rule(n_clicks, pattern, category_id, priority):
         return dbc.Alert([
             html.H5("✓ Rule Created", className="alert-heading"),
             html.P(f"Pattern: '{pattern}' successfully added to rules."),
-        ], color="success"), 1, "", None, 10  # Reset form
+        ], color="success"), 1, "", None, 10, ""  # Reset form
 
     except Exception as e:
         print(f"[Add Rule] Error: {e}")
         import traceback
         traceback.print_exc()
-        return dbc.Alert(f"Error creating rule: {str(e)}", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dbc.Alert(f"Error creating rule: {str(e)}", color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 
 # ==================== IMPORT RULES CALLBACKS ====================
@@ -3056,38 +3333,82 @@ def dismiss_selected(n_clicks, selected_rows, table_data):
 
 
 @callback(
-    Output('purge-modal', 'is_open'),
+    [Output('purge-modal', 'is_open'),
+     Output('purge-modal-title', 'children'),
+     Output('purge-modal-body', 'children')],
     Input('btn-purge-transactions', 'n_clicks'),
     Input('purge-cancel', 'n_clicks'),
-    State('purge-modal', 'is_open'),
+    [State('purge-modal', 'is_open'),
+     State('selected-account', 'data')],
     prevent_initial_call=True,
 )
-def toggle_purge_modal(purge_click, cancel_click, is_open):
-    """Toggle purge confirmation modal."""
-    return not is_open
+def toggle_purge_modal(purge_click, cancel_click, is_open, selected_account):
+    """Toggle purge confirmation modal with account-specific warning."""
+    # Build account-specific message
+    account_label = selected_account or "All Accounts"
+
+    # Get transaction counts for selected account
+    try:
+        stats = db.get_statistics(account_number=selected_account)
+        txn_count = stats.get('total_transactions', 0)
+    except:
+        txn_count = 0
+
+    title = f"⚠️ Confirm Purge: {account_label}"
+
+    body = [
+        html.P([
+            html.Strong(f"This will permanently delete all transactions for: {account_label}"),
+        ], className="text-danger"),
+        html.Hr(),
+        html.P("What will be deleted:"),
+        html.Ul([
+            html.Li(f"All transaction records for this account (~{txn_count:,} transactions)"),
+            html.Li("All potential duplicates for this account"),
+            html.Li("All categorization data for these transactions"),
+        ]),
+        html.P("What will be preserved:"),
+        html.Ul([
+            html.Li("All rules"),
+            html.Li("All categories"),
+            html.Li("Transactions from other accounts (if any)"),
+        ], className="text-success"),
+        html.Hr(),
+        html.P([
+            html.Strong("Are you sure you want to continue?"),
+        ]),
+    ]
+
+    return not is_open, title, body
 
 
 @callback(
     Output('reapply-rules-status', 'children', allow_duplicate=True),
     Output('purge-modal', 'is_open', allow_duplicate=True),
     Input('purge-confirm', 'n_clicks'),
+    State('selected-account', 'data'),
     prevent_initial_call=True,
 )
-def execute_purge(confirm_click):
-    """Execute purge of all transactions (preserves rules and categories)."""
+def execute_purge(confirm_click, selected_account):
+    """Execute purge of transactions for selected account (preserves rules and categories)."""
     if confirm_click is None:
         raise PreventUpdate
 
     try:
-        # Delete all transactions
-        count = db.delete_all_transactions()
+        # Delete transactions (and duplicates) for selected account
+        result = db.delete_all_transactions(account_number=selected_account)
+
+        # Build account label for message
+        account_label = selected_account or "All Accounts"
 
         # Close modal and show success message
         return dbc.Alert([
-            html.H5("✓ All Transactions Purged", className="alert-heading"),
+            html.H5(f"✓ Transactions Purged for {account_label}", className="alert-heading"),
             html.Hr(),
             html.P([
-                f"🗑️ Deleted {count} transactions",
+                f"🗑️ Deleted {result['transactions']} transactions",
+                html.Br(),
+                f"🗑️ Deleted {result['duplicates']} potential duplicates",
                 html.Br(),
                 "✓ Rules preserved",
                 html.Br(),
@@ -3143,6 +3464,808 @@ def sync_account_selection(selected_account):
 
 
 # ============================================================================
+# Analytics Tab Callbacks
+# ============================================================================
+
+@callback(
+    Output('analytics-month-selector', 'options'),
+    Output('analytics-month-selector', 'value'),
+    Input('btn-refresh-analytics', 'n_clicks'),
+    Input('url', 'pathname'),
+    State('selected-account', 'data'),
+)
+def populate_analytics_month_dropdown(n_clicks, pathname, selected_account):
+    """Populate month dropdown with available months from transactions."""
+    try:
+        # Get all transactions for selected account
+        transactions = db.get_transactions(account_number=selected_account)
+
+        if not transactions:
+            return [], None
+
+        # Convert to Polars for fast aggregation
+        df = pl.DataFrame([{
+            'date': t.date,
+            'amount': float(t.amount),
+        } for t in transactions])
+
+        # Extract year-month and sort
+        df = df.with_columns([
+            pl.col('date').dt.strftime('%Y-%m').alias('month')
+        ])
+
+        months = df['month'].unique().sort(descending=True).to_list()
+
+        # Format options
+        options = [{'label': datetime.strptime(m, '%Y-%m').strftime('%B %Y'), 'value': m} for m in months]
+
+        # Default to most recent month
+        default_month = months[0] if months else None
+
+        return options, default_month
+
+    except Exception as e:
+        print(f"Error populating analytics months: {e}")
+        import traceback
+        traceback.print_exc()
+        return [], None
+
+
+@callback(
+    Output('income-chart', 'figure'),
+    Output('expense-chart', 'figure'),
+    Output('analytics-summary', 'children'),
+    Input('analytics-month-selector', 'value'),
+    Input('btn-refresh-analytics', 'n_clicks'),
+    State('selected-account', 'data'),
+)
+def update_analytics_charts(selected_month, n_clicks, selected_account):
+    """Update income and expense charts showing monthly transactions by category."""
+    import plotly.graph_objects as go
+
+    try:
+        if not selected_month:
+            # Empty chart with message
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Select a month to view spending analysis",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16, color="gray")
+            )
+            fig.update_layout(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                height=400,
+            )
+            empty_fig = fig
+            return empty_fig, empty_fig, ""
+
+        # Get all transactions for selected month and account
+        transactions = db.get_transactions(account_number=selected_account)
+
+        if not transactions:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No transactions found",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16, color="gray")
+            )
+            fig.update_layout(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                height=400,
+            )
+            empty_fig = fig
+            return empty_fig, empty_fig, ""
+
+        # Convert to Polars
+        # Note: transactions store category as NAME (string), not UUID
+        df = pl.DataFrame([{
+            'date': t.date,
+            'amount': float(t.amount),
+            'category': t.category if t.category else 'Uncategorized',
+        } for t in transactions])
+
+        # Filter to selected month
+        df = df.with_columns([
+            pl.col('date').dt.strftime('%Y-%m').alias('month')
+        ])
+        df = df.filter(pl.col('month') == selected_month)
+
+        if len(df) == 0:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No transactions found for selected month",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16, color="gray")
+            )
+            fig.update_layout(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                height=400,
+            )
+            empty_fig = fig
+            return empty_fig, empty_fig, ""
+
+        # Aggregate income and expenses separately for each category
+        income_by_category = (
+            df.filter(pl.col('amount') > 0)
+            .group_by('category')
+            .agg(pl.col('amount').sum().alias('total'))
+            .with_columns(pl.lit('Income').alias('type'))
+            .with_columns((pl.col('category') + ' (Income)').alias('label'))
+        )
+        
+        expense_by_category = (
+            df.filter(pl.col('amount') < 0)
+            .group_by('category')
+            .agg(pl.col('amount').sum().abs().alias('total'))
+            .with_columns(pl.lit('Expense').alias('type'))
+            .with_columns((pl.col('category') + ' (Expense)').alias('label'))
+        )
+
+        # Combine both
+        all_data = pl.concat([income_by_category, expense_by_category])
+        all_data = all_data.filter(pl.col('total') > 0)  # Remove zero amounts
+        all_data = all_data.sort('total', descending=True)
+
+        # Create horizontal bar chart
+        fig = go.Figure()
+
+        if len(all_data) > 0:
+            # Separate into income and expense traces
+            income_data = all_data.filter(pl.col('type') == 'Income')
+            expense_data = all_data.filter(pl.col('type') == 'Expense')
+            
+            # Add expense bars (red)
+            if len(expense_data) > 0:
+                fig.add_trace(go.Bar(
+                    x=expense_data['total'].to_list(),
+                    y=expense_data['label'].to_list(),
+                    orientation='h',
+                    marker=dict(
+                        color='#e74c3c',
+                        line=dict(color='rgba(0,0,0,0.3)', width=1)
+                    ),
+                    name='Expenses',
+                    text=[f"£{v:,.2f}" for v in expense_data['total'].to_list()],
+                    textposition='outside',
+                    cliponaxis=False,
+                    hovertemplate='<b>%{y}</b><br>Amount: £%{x:,.2f}<extra></extra>',
+                ))
+            
+            # Add income bars (green)
+            if len(income_data) > 0:
+                fig.add_trace(go.Bar(
+                    x=income_data['total'].to_list(),
+                    y=income_data['label'].to_list(),
+                    orientation='h',
+                    marker=dict(
+                        color='#27ae60',
+                        line=dict(color='rgba(0,0,0,0.3)', width=1)
+                    ),
+                    name='Income',
+                    text=[f"£{v:,.2f}" for v in income_data['total'].to_list()],
+                    textposition='outside',
+                    cliponaxis=False,
+                    hovertemplate='<b>%{y}</b><br>Amount: £%{x:,.2f}<extra></extra>',
+                ))
+
+        # Format chart
+        month_label = datetime.strptime(selected_month, '%Y-%m').strftime('%B %Y')
+        account_label = "All Accounts" if not selected_account else f"Account {selected_account}"
+
+        fig.update_layout(
+            title=f"Income & Expenses by Category - {month_label} ({account_label})",
+            xaxis_title="Amount (£)",
+            yaxis_title="Category",
+            height=max(400, len(expense_by_category) * 30 + 100),  # Dynamic height
+            showlegend=False,
+            margin=dict(l=200, r=180, t=60, b=60),  # Increased right margin for text labels
+            hovermode='closest',
+            dragmode=False,
+            xaxis=dict(automargin=True),  # Auto-expand to fit text
+        )
+
+        # Calculate summary stats from the original df
+        total_expenses = df.filter(pl.col('amount') < 0)['amount'].sum() * -1  # Convert to positive
+        total_income = df.filter(pl.col('amount') > 0)['amount'].sum()
+        net = total_income - total_expenses
+        transaction_count = len(df)
+
+        # Create summary cards
+        summary = dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Total Expenses", className="card-subtitle text-muted mb-2"),
+                        html.H4(f"£{total_expenses:,.2f}", className="card-title text-danger mb-0"),
+                    ])
+                ], className="mb-3"),
+            ], width=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Total Income", className="card-subtitle text-muted mb-2"),
+                        html.H4(f"£{total_income:,.2f}", className="card-title text-success mb-0"),
+                    ])
+                ], className="mb-3"),
+            ], width=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Net", className="card-subtitle text-muted mb-2"),
+                        html.H4(
+                            f"£{net:,.2f}",
+                            className=f"card-title {'text-success' if net >= 0 else 'text-danger'} mb-0"
+                        ),
+                    ])
+                ], className="mb-3"),
+            ], width=3),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6("Transactions", className="card-subtitle text-muted mb-2"),
+                        html.H4(f"{transaction_count:,}", className="card-title mb-0"),
+                    ])
+                ], className="mb-3"),
+            ], width=3),
+        ])
+
+        # Split into income and expense figures
+        income_fig = go.Figure()
+        expense_fig = go.Figure()
+
+        if len(income_data) > 0:
+            income_fig.add_trace(go.Bar(
+                x=income_data['total'].to_list(),
+                y=income_data['label'].to_list(),
+                orientation='h',
+                marker=dict(
+                    color='#27ae60',
+                    line=dict(color='rgba(0,0,0,0.3)', width=1)
+                ),
+                name='Income',
+                text=[f"£{v:,.2f}" for v in income_data['total'].to_list()],
+                textposition='outside',
+                cliponaxis=False,
+                hovertemplate='<b>%{y}</b><br>Amount: £%{x:,.2f}<extra></extra>',
+            ))
+
+        if len(expense_data) > 0:
+            expense_fig.add_trace(go.Bar(
+                x=expense_data['total'].to_list(),
+                y=expense_data['label'].to_list(),
+                orientation='h',
+                marker=dict(
+                    color='#e74c3c',
+                    line=dict(color='rgba(0,0,0,0.3)', width=1)
+                ),
+                name='Expenses',
+                text=[f"£{v:,.2f}" for v in expense_data['total'].to_list()],
+                textposition='outside',
+                cliponaxis=False,
+                hovertemplate='<b>%{y}</b><br>Amount: £%{x:,.2f}<extra></extra>',
+            ))
+
+        # Format income chart
+        income_height = max(300, len(income_data) * 30 + 100) if len(income_data) > 0 else 200
+        income_fig.update_layout(
+            title=f"Income - {month_label} ({account_label})",
+            xaxis_title="Amount (£)",
+            yaxis_title="Category",
+            height=income_height,
+            showlegend=False,
+            margin=dict(l=200, r=180, t=60, b=40),
+            hovermode='closest',
+            dragmode=False,
+            xaxis=dict(automargin=True),
+        )
+
+        # Format expense chart
+        expense_height = max(300, len(expense_data) * 30 + 100) if len(expense_data) > 0 else 200
+        expense_fig.update_layout(
+            title=f"Expenses - {month_label} ({account_label})",
+            xaxis_title="Amount (£)",
+            yaxis_title="Category",
+            height=expense_height,
+            showlegend=False,
+            margin=dict(l=200, r=180, t=60, b=40),
+            hovermode='closest',
+            dragmode=False,
+            xaxis=dict(automargin=True),
+        )
+
+        return income_fig, expense_fig, summary
+
+    except Exception as e:
+        print(f"Error generating analytics chart: {e}")
+        import traceback
+        traceback.print_exc()
+
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color="red")
+        )
+        fig.update_layout(
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            height=400,
+        )
+
+        error_message = dbc.Alert(f"Error generating chart: {str(e)}", color="danger")
+        return fig, error_message
+
+
+
+
+@callback(
+    Output('analytics-transaction-details', 'children'),
+    Input('income-chart', 'clickData'),
+    Input('expense-chart', 'clickData'),
+    State('analytics-month-selector', 'value'),
+    State('selected-account', 'data'),
+)
+def update_transaction_details(income_clickData, expense_clickData, selected_month, selected_account):
+    """Show transaction details when a bar is clicked."""
+    # Detect which chart was actually clicked
+    triggered_id = ctx.triggered_id if ctx.triggered else None
+
+    if triggered_id == 'income-chart':
+        clickData = income_clickData
+    elif triggered_id == 'expense-chart':
+        clickData = expense_clickData
+    else:
+        clickData = None
+
+    try:
+        # Default empty state
+        if not clickData or not selected_month:
+            return dbc.Card([
+                dbc.CardBody([
+                    html.H5("Transaction Details", className="mb-3"),
+                    html.P("Click on a bar to see transactions",
+                           className="text-muted text-center",
+                           style={'padding': '50px 20px'})
+                ])
+            ])
+
+        # Extract clicked label (e.g., "Groceries (Expense)" or "Salary (Income)")
+        clicked_label = clickData['points'][0]['y']
+        
+        # Parse category and type from label
+        if ' (Income)' in clicked_label:
+            clicked_category = clicked_label.replace(' (Income)', '')
+            clicked_type = 'Income'
+        elif ' (Expense)' in clicked_label:
+            clicked_category = clicked_label.replace(' (Expense)', '')
+            clicked_type = 'Expense'
+        else:
+            clicked_category = clicked_label
+            clicked_type = None
+
+        # Get all transactions for the selected month and account
+        transactions = db.get_transactions(account_number=selected_account)
+
+        if not transactions:
+            return dbc.Card([
+                dbc.CardBody([
+                    html.H5(f"Transactions: {clicked_category}", className="mb-3"),
+                    html.P("No transactions found", className="text-muted text-center")
+                ])
+            ])
+
+        # Filter by month and category
+        df = pl.DataFrame([{
+            'id': t.id,
+            'date': t.date,
+            'description': t.description,
+            'amount': float(t.amount),
+            'category': t.category if t.category else 'Uncategorized',
+        } for t in transactions])
+
+        # Filter to selected month and category
+        df = df.with_columns([
+            pl.col('date').dt.strftime('%Y-%m').alias('month')
+        ])
+        
+        # Filter by month and category
+        filter_expr = (pl.col('month') == selected_month) & (pl.col('category') == clicked_category)
+        
+        # Additionally filter by income/expense type if specified
+        if clicked_type == 'Income':
+            filter_expr = filter_expr & (pl.col('amount') > 0)
+        elif clicked_type == 'Expense':
+            filter_expr = filter_expr & (pl.col('amount') < 0)
+        
+        df = df.filter(filter_expr)
+
+        if len(df) == 0:
+            return dbc.Card([
+                dbc.CardBody([
+                    html.H5(f"Transactions: {clicked_category}", className="mb-3"),
+                    html.P("No transactions found for this category", className="text-muted text-center")
+                ])
+            ])
+
+        # Sort by date descending
+        df = df.sort('date', descending=True)
+
+        # Convert to pandas for DataTable
+        df_display = df.select(['date', 'description', 'amount']).to_pandas()
+        df_display['date'] = pd.to_datetime(df_display['date']).dt.strftime('%Y-%m-%d')
+        df_display['amount'] = df_display['amount'].apply(lambda x: f"£{x:,.2f}")
+
+        # Calculate summary stats
+        total_amount = df['amount'].sum()
+        transaction_count = len(df)
+        avg_amount = df['amount'].mean()
+
+        return dbc.Card([
+            dbc.CardBody([
+                html.H5(clicked_label, className="mb-3"),
+
+                # Summary stats
+                dbc.Row([
+                    dbc.Col([
+                        html.Small("Total", className="text-muted d-block"),
+                        html.Strong(f"£{abs(total_amount):,.2f}", className="text-danger"),
+                    ], width=4),
+                    dbc.Col([
+                        html.Small("Count", className="text-muted d-block"),
+                        html.Strong(f"{transaction_count}", className="text-primary"),
+                    ], width=4),
+                    dbc.Col([
+                        html.Small("Avg", className="text-muted d-block"),
+                        html.Strong(f"£{abs(avg_amount):,.2f}", className="text-secondary"),
+                    ], width=4),
+                ], className="mb-3"),
+
+                html.Hr(),
+
+                # Transaction table
+                dash_table.DataTable(
+                    data=df_display.to_dict('records'),
+                    columns=[
+                        {'name': 'Date', 'id': 'date'},
+                        {'name': 'Description', 'id': 'description'},
+                        {'name': 'Amount', 'id': 'amount'},
+                    ],
+                    style_table={
+                        'overflowY': 'auto', 
+                        'maxHeight': '450px'
+                    },
+                    style_cell={
+                        'textAlign': 'left',
+                        'padding': '10px',
+                        'fontSize': '13px',
+                        'whiteSpace': 'normal',
+                        'height': 'auto',
+                        'lineHeight': '1.4',
+                    },
+                    style_header={
+                        'backgroundColor': '#f8f9fa',
+                        'fontWeight': 'bold',
+                        'borderBottom': '2px solid #dee2e6',
+                        'textAlign': 'center',
+                    },
+                    style_data={
+                        'whiteSpace': 'normal',
+                        'height': 'auto',
+                        'overflow': 'hidden',
+                        'textOverflow': 'clip',
+                    },
+                    style_cell_conditional=[
+                        {
+                            'if': {'column_id': 'date'}, 
+                            'width': '100px',
+                            'textAlign': 'center',
+                        },
+                        {
+                            'if': {'column_id': 'description'}, 
+                            'minWidth': '200px',
+                            'maxWidth': '300px',
+                        },
+                        {
+                            'if': {'column_id': 'amount'}, 
+                            'width': '100px', 
+                            'textAlign': 'right',
+                        },
+                    ],
+                    page_size=10,
+                )
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Error updating transaction details: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Card([
+            dbc.CardBody([
+                html.H5("Error", className="mb-3"),
+                dbc.Alert(f"Error: {str(e)}", color="danger")
+            ])
+        ])
+
+
+
+
+@callback(
+    Output('folder-path-display', 'children'),
+    Output('export-folder-path', 'data'),
+    Input('btn-choose-folder', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def choose_export_folder(n_clicks):
+    """Open folder picker and save selected path."""
+    if not n_clicks:
+        raise PreventUpdate
+
+    try:
+        # Create tkinter root window (hidden)
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+
+        # Open folder picker dialog
+        folder_path = filedialog.askdirectory(
+            title="Choose Export Folder",
+            mustexist=True
+        )
+
+        root.destroy()
+
+        if folder_path:
+            # Return display message and store the path
+            return f"Export to: {folder_path}", folder_path
+        else:
+            return "No folder selected", None
+
+    except Exception as e:
+        print(f"Error selecting folder: {e}")
+        return "Error selecting folder", None
+
+
+@callback(
+    Output('download-analytics-pdf', 'data'),
+    Input('btn-export-pdf', 'n_clicks'),
+    State('income-chart', 'figure'),
+    State('expense-chart', 'figure'),
+    State('income-chart', 'clickData'),
+    State('expense-chart', 'clickData'),
+    State('analytics-month-selector', 'value'),
+    State('selected-account', 'data'),
+    State('export-folder-path', 'data'),
+    prevent_initial_call=True,
+)
+def export_analytics_pdf(n_clicks, income_fig, expense_fig, income_click, expense_click, selected_month, selected_account, export_folder):
+    """Export analytics charts to PDF (A4 landscape) using matplotlib."""
+    if not n_clicks or not selected_month:
+        raise PreventUpdate
+
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-GUI backend to avoid threading issues
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
+        import io
+        from datetime import datetime
+
+        # Parse month and account labels
+        month_label = datetime.strptime(selected_month, '%Y-%m').strftime('%B %Y')
+        account_label = "All Accounts" if not selected_account else f"Account {selected_account}"
+
+        # Create PDF in memory
+        pdf_buffer = io.BytesIO()
+
+        # Determine which category was clicked (if any)
+        clickData = income_click if income_click else expense_click
+        clicked_category = None
+        clicked_type = None
+        transactions_df = None
+
+        print(f"DEBUG: income_click = {income_click}")
+        print(f"DEBUG: expense_click = {expense_click}")
+        print(f"DEBUG: clickData = {clickData}")
+
+        if clickData and 'points' in clickData and len(clickData['points']) > 0:
+            clicked_label = clickData['points'][0]['y']
+
+            # Parse category and type from label
+            if ' (Income)' in clicked_label:
+                clicked_category = clicked_label.replace(' (Income)', '')
+                clicked_type = 'Income'
+            elif ' (Expense)' in clicked_label:
+                clicked_category = clicked_label.replace(' (Expense)', '')
+                clicked_type = 'Expense'
+
+            # Load and filter transactions
+            from src.data.database import FinanceDatabase
+            import polars as pl
+
+            db = FinanceDatabase()
+            all_transactions = db.get_transactions()
+
+            print(f"DEBUG: Loaded {len(all_transactions)} transactions")
+
+            if len(all_transactions) == 0:
+                print("DEBUG: No transactions found in database!")
+                transactions_df = None
+            else:
+                # Convert Pydantic models to dictionaries for Polars
+                transaction_dicts = [t.model_dump() for t in all_transactions]
+                print(f"DEBUG: Converted to {len(transaction_dicts)} dicts")
+
+                if len(transaction_dicts) > 0:
+                    print(f"DEBUG: First dict keys: {list(transaction_dicts[0].keys())}")
+
+                df = pl.DataFrame(transaction_dicts)
+                print(f"DEBUG: DataFrame shape: {df.shape}, columns: {df.columns}")
+
+                # Filter by month
+                start_date = datetime.strptime(selected_month, '%Y-%m')
+                if start_date.month == 12:
+                    end_date = start_date.replace(year=start_date.year + 1, month=1)
+                else:
+                    end_date = start_date.replace(month=start_date.month + 1)
+
+                filter_expr = (pl.col('date') >= start_date) & (pl.col('date') < end_date)
+
+                # Filter by account if specified
+                if selected_account:
+                    filter_expr = filter_expr & (pl.col('account_number') == selected_account)
+
+                # Filter by category and type
+                filter_expr = filter_expr & (pl.col('category') == clicked_category)
+                if clicked_type == 'Income':
+                    filter_expr = filter_expr & (pl.col('amount') > 0)
+                elif clicked_type == 'Expense':
+                    filter_expr = filter_expr & (pl.col('amount') < 0)
+
+                transactions_df = df.filter(filter_expr).sort('date', descending=True)
+
+        # A4 landscape: 11.69 x 8.27 inches
+        # Create PDF with PdfPages context manager
+        with PdfPages(pdf_buffer) as pdf:
+            # Page 1: Create and plot charts
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11.69, 8.27))
+            fig.suptitle(f'Income & Expenses Analysis - {month_label}\n{account_label}',
+                        fontsize=16, fontweight='bold', y=0.98)
+
+            # Extract and plot Income data
+            if income_fig and 'data' in income_fig and len(income_fig['data']) > 0:
+                income_data = income_fig['data'][0]
+                categories = income_data['y']
+                values = income_data['x']
+
+                bars = ax1.barh(categories, values, color='#27ae60', edgecolor='black', linewidth=0.5)
+                ax1.set_xlabel('Amount (£)', fontsize=10)
+                ax1.set_title(f"Income - {month_label}", fontsize=12, fontweight='bold', pad=10)
+                ax1.grid(axis='x', alpha=0.3)
+
+                # Add value labels
+                for bar in bars:
+                    width = bar.get_width()
+                    ax1.text(width, bar.get_y() + bar.get_height()/2,
+                            f'£{width:,.0f}', ha='left', va='center',
+                            fontsize=8, fontweight='bold')
+            else:
+                ax1.text(0.5, 0.5, 'No Income Data', ha='center', va='center',
+                        transform=ax1.transAxes, fontsize=12)
+                ax1.set_xlim(0, 1)
+
+            # Extract and plot Expense data
+            if expense_fig and 'data' in expense_fig and len(expense_fig['data']) > 0:
+                expense_data = expense_fig['data'][0]
+                categories = expense_data['y']
+                values = expense_data['x']
+
+                bars = ax2.barh(categories, values, color='#e74c3c', edgecolor='black', linewidth=0.5)
+                ax2.set_xlabel('Amount (£)', fontsize=10)
+                ax2.set_title(f"Expenses - {month_label}", fontsize=12, fontweight='bold', pad=10)
+                ax2.grid(axis='x', alpha=0.3)
+
+                # Add value labels
+                for bar in bars:
+                    width = bar.get_width()
+                    ax2.text(width, bar.get_y() + bar.get_height()/2,
+                            f'£{width:,.0f}', ha='left', va='center',
+                            fontsize=8, fontweight='bold')
+            else:
+                ax2.text(0.5, 0.5, 'No Expense Data', ha='center', va='center',
+                        transform=ax2.transAxes, fontsize=12)
+                ax2.set_xlim(0, 1)
+
+            plt.tight_layout()
+            pdf.savefig(fig, bbox_inches='tight')
+            plt.close(fig)
+
+            # Page 2: Transaction details table (if bar was clicked)
+            if transactions_df is not None and len(transactions_df) > 0:
+                trans_data = transactions_df.select(['date', 'description', 'amount', 'category']).to_dicts()
+
+                # Format data for display
+                table_data = []
+                for trans in trans_data[:50]:  # Limit to 50 transactions
+                    table_data.append([
+                        trans['date'].strftime('%Y-%m-%d'),
+                        trans['description'][:40],  # Truncate long descriptions
+                        f"£{abs(trans['amount']):.2f}",
+                        trans['category']
+                    ])
+
+                if len(table_data) > 0:
+                    # Create transaction table page
+                    fig2 = plt.figure(figsize=(11.69, 8.27))
+                    ax_table = fig2.add_subplot(111)
+                    ax_table.axis('tight')
+                    ax_table.axis('off')
+
+                    table = ax_table.table(
+                        cellText=table_data,
+                        colLabels=['Date', 'Description', 'Amount', 'Category'],
+                        cellLoc='left',
+                        loc='center',
+                        colWidths=[0.15, 0.45, 0.15, 0.25]
+                    )
+
+                    table.auto_set_font_size(False)
+                    table.set_fontsize(8)
+                    table.scale(1, 1.5)
+
+                    # Style header
+                    for i in range(4):
+                        table[(0, i)].set_facecolor('#40466e')
+                        table[(0, i)].set_text_props(weight='bold', color='white')
+
+                    # Style cells
+                    for i in range(1, len(table_data) + 1):
+                        for j in range(4):
+                            if i % 2 == 0:
+                                table[(i, j)].set_facecolor('#f0f0f0')
+
+                    fig2.suptitle(f'{clicked_category} ({clicked_type}) - Transaction Details\nShowing {len(table_data)} of {len(transactions_df)} transactions',
+                                fontsize=14, fontweight='bold', y=0.95)
+
+                    pdf.savefig(fig2, bbox_inches='tight')
+                    plt.close(fig2)
+
+        # Get PDF data
+        pdf_buffer.seek(0)
+        pdf_data = pdf_buffer.read()
+
+        # If user selected a folder, save there. Otherwise, return as download
+        filename = f"analytics_{selected_month.replace('-', '_')}.pdf"
+
+        if export_folder:
+            import os
+            # Save to selected folder
+            full_path = os.path.join(export_folder, filename)
+            with open(full_path, 'wb') as f:
+                f.write(pdf_data)
+            print(f"PDF saved to: {full_path}")
+            # Return empty dict to prevent browser download
+            raise PreventUpdate
+        else:
+            # Return as browser download (default behavior)
+            return dict(content=pdf_data, filename=filename, type='application/pdf', base64=False)
+
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        raise PreventUpdate
+
+
+
+# ============================================================================
 # Run Server
 # ============================================================================
 
@@ -3154,4 +4277,4 @@ if __name__ == '__main__':
     print(f"Server: http://localhost:8050/")
     print("=" * 80)
 
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    app.run(debug=False, host='0.0.0.0', port=8050)
