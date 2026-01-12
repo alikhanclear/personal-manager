@@ -1,729 +1,1123 @@
-# CasualHero BI Platform - Development Context
+# Personal Manager - Project Context
 
 ## Project Overview
-Replace Power BI dashboards (£500/month) with custom Streamlit solution.
-- Customer: Snowflake Gelato (15 locations)
-- Timeline: 2-3 weeks to MVP
-- Clean break from Power BI (no dependency)
-- Target cost should not exceed £100/month. Ideally sticking to £30/month
+A personal management platform for financial tracking and business operations automation.
+
+**Current Module: Finance Tracker**
+- Import and categorize bank transactions (NatWest CSV)
+- AI-powered categorization using Anthropic Claude Haiku (with prompt caching for 90% cost reduction)
+- Rule-based automation with pattern matching
+- Budget tracking and analytics
+- Duplicate detection and review workflow
+
+**Technical Stack:**
+- **Database**: SQLite (local storage)
+- **UI Framework**: Dash (Plotly) with Bootstrap components
+- **Language**: Python 3.11+
+
+**Future Modules (Planned):**
+- Invoice Generation
+- Additional business automation tools
+
+---
+
+## 🔴 RULES OF ENGAGEMENT (Communication Protocol)
+
+**CRITICAL: Always Be Verbose About Changes**
+
+### 1. Before Any Destructive Operation
+- ✅ **Explain WHAT** will be deleted/modified/overwritten
+- ✅ **Explain the IMPACT** (what the user will lose)
+- ✅ **Ask for PERMISSION** before proceeding
+- ✅ **Offer alternatives** (backup, preserve data, different approach)
+
+**Example:**
+```
+"I'm about to run a script that will:
+1. DELETE ALL 83 rules from your database (including custom rules)
+2. Recreate only 62 default rules
+3. Your custom 'VIZARAT ALIKHAN → Healthcare' rule will be LOST
+
+Do you want me to:
+- A) Proceed (you'll recreate custom rules later)
+- B) Write a smarter script that preserves custom rules
+- C) Backup the database first"
+```
+
+### 2. During Implementation
+- ✅ Explain each step as you work
+- ✅ Show what's changing and why
+- ✅ Use TodoWrite to track progress
+- ✅ Don't assume the user knows what you're doing
+
+### 3. After Each Activity - ALWAYS Summarize
+- ✅ **What was changed** (which files, what code)
+- ✅ **What data was affected** (database changes, deletions)
+- ✅ **What the user needs to test/verify**
+- ✅ **Highlight any data loss or breaking changes**
+- ✅ **Document in session notes at the end**
+
+### 4. Learning Together
+- ✅ Explain the "why" behind decisions
+- ✅ Show the complete flow/logic
+- ✅ Help user understand the system, not just fix bugs
+- ✅ User should be able to make informed decisions
+
+### Examples:
+- ❌ **BAD**: "Let me run this fix script" → runs it → "Done!"
+- ✅ **GOOD**: "This script will delete X, modify Y, and impact Z. The trade-off is... Do you want me to proceed or explore alternatives?"
+
+---
 
 ## Tech Stack
-- Frontend: **Dash** (Plotly) - Migrated from Streamlit in Session 5
-- Data Processing: Polars + DuckDB
-- Database: PostgreSQL (AWS initially, Neon long-term)
-- Deployment: Fly.io (8GB RAM, always-on)
-- Language: Python 3.11+
-- NO Next.js/Vercel (principle)
+- **Frontend**: Dash + dash-bootstrap-components + dash-table
+- **Data Processing**: Polars (CSV parsing), Pandas (display)
+- **Database**: SQLite with Pydantic models
+- **AI**: Anthropic Claude Haiku (`claude-3-haiku-20240307`)
+- **Background Processing**: subprocess.Popen for long-running AI tasks
 
-## Database Migration Strategy
+## Core Features
 
-### Phase 1: AWS PostgreSQL (Current/MVP)
-**Initial Setup (2-3 weeks):**
-- Connect to existing AWS PostgreSQL instance
-- Use existing materialized view (already created)
-- Treat as "black box" - query the view, get data
-- Focus on building Streamlit UI and recreating Power BI dashboards
+### 1. Transaction Import
+- Upload NatWest CSV files (auto-detects delimiter: comma or semicolon)
+- Deterministic transaction IDs (MD5 hash) for duplicate detection
+- Automatic duplicate prevention on re-upload
+- Parses: Date, Description, Amount, Balance, Account Number
 
-**Why this approach:**
-- Fast MVP delivery (no database work needed)
-- Client already has AWS infrastructure
-- Materialized view already optimized
-- Low risk - proven data source
+### 2. Categorization System
 
-### Phase 2: Reverse Engineering (Post-MVP)
-**Gradual Migration:**
-- Reverse engineer the materialized view logic
-- Understand the transformations and aggregations
-- Document the SQL queries and business rules
-- Recreate logic in Polars/DuckDB (Python-native)
+**Two-Tier Approach:**
+1. **Rule-Based (Free, Instant)**
+   - Pattern matching on transaction descriptions
+   - Priority-based rule ordering
+   - Confidence = 1.0 for rule matches
 
-**Goals:**
-- Understand what the view does
-- Identify optimization opportunities
-- Prepare for Neon migration
+2. **AI Fallback (Paid, Slower)**
+   - Claude Haiku with prompt caching (90% cost reduction)
+   - Rate-limited to 42 requests/min (under 50/min API limit)
+   - Confidence = 0.0-0.99 for AI suggestions
+   - Retry logic with exponential backoff
+   - Background processing with live progress tracking
 
-### Phase 3: Neon Migration (Future)
-**Long-term Target:**
-- Migrate to Neon Serverless PostgreSQL
-- Implement materialized view logic in application layer (Polars/DuckDB)
-- Cost optimization (Neon's pay-per-use model)
-- Better control over data transformations
+**Confidence Values:**
+- `1.0` = Rule matched or manually confirmed
+- `0.0-0.99` = AI suggestion (needs review)
+- `None` = Uncategorized
 
-**Benefits:**
-- Lower monthly costs (target: £30/month total)
-- Serverless scaling
-- Simplified infrastructure
-- More flexible data processing
+### 3. Background AI Processing
+- Launched via subprocess (detached from UI)
+- Live progress tracking via JSON file (polled every 3 seconds)
+- Displays: processed count, rule matched, AI categorized, ETA
+- Stall detection (warns if no update for 5+ minutes)
+- 1.4 second delay between AI requests (rate limiting)
 
-### Connection Architecture
-**connector.py must support BOTH:**
-```python
-# Phase 1: AWS PostgreSQL
-DATABASE_URL=postgresql://user:pass@aws-instance:5432/db
+### 4. Review & Correction Workflow
+- Filter views:
+  - Rule Matched (auto-categorized)
+  - AI Suggestions (needs review)
+  - Uncategorized Only
+  - Confirmed
+  - All Transactions
+- Inline category editing
+- **Confirm** button: Mark category as correct (confidence = 1.0)
+- **Confirm & Create Rule** button: Confirm + create pattern-based rule for future
 
-# Phase 3: Neon PostgreSQL
-DATABASE_URL=postgresql://user:pass@neon-instance:5432/db
-```
+### 5. Rules Management
+- Dedicated "Rules" tab showing ALL rules (no pagination)
+- Scrollable list with sticky header
+- Sortable and filterable
+- Auto-refreshes every 10 seconds
+- Shows: Pattern, Category, Priority, Created Date
 
-**Key Principle:** Same connector code works for both - just swap DATABASE_URL
-
-## Critical Business Rules
-
-### 7AM Cutoff Rule
-Transactions before 7:00 AM count as PREVIOUS day.
-```python
-def adjust_for_cutoff(timestamp: datetime, cutoff_hour: int = 7) -> date:
-    if timestamp.hour < cutoff_hour:
-        return (timestamp - timedelta(days=1)).date()
-    return timestamp.date()
-```
-
-### Fiscal Calendar - Manual Override Approach
-Fiscal Year: October 1 - September 30
-Weeks: Monday - Sunday
-
-**Manual overrides (from Power BI DAX):**
-```python
-FISCAL_OVERRIDES = {
-    2024: date(2023, 10, 2),   # Oct 1, 2023 is Sunday → Week 1 starts Oct 2
-    2025: date(2024, 9, 30),   # Oct 1, 2024 is Tuesday → Week 1 starts Sep 30
-    # Add more years as needed
-}
-```
-
-**Rule Pattern:**
-- Just follow FISCAL_OVERRIDES rules
-
-### Week/Year Boundary Logic
-```
-FY2024 (Oct 1, 2023 is Sunday):
-└── Week 1: Oct 2 - Oct 8
-└── Sep 25 - Oct 1 is FY2023 Week 52/53
-
-FY2025 (Oct 1, 2024 is Tuesday):
-└── Week 1: Sep 30 - Oct 6
-└── Sep 30 is in FY2025 (!)
-```
+### 6. Statistics Dashboard
+- Total transactions
+- Total categories
+- Active rules count
 
 ## Data Model
 
-### Data Retention Requirement
-**5-Year Historical Data:**
-- Production system must maintain 5 years of transaction history
-- Enables: Current year + 2-year YoY comparisons + 5-year trend analysis
-- Volume estimate: ~39M transaction line items (~3-5GB in Polars)
-- User can select any year from current back to 4 years prior
-
-### Current State (Phase 1)
-**AWS PostgreSQL Materialized View:**
-- Name: `public.mv_item_details`
-- Structure: Transaction-level data (11 columns)
-- **Refresh Schedule: Daily by 9:00 AM** (Snowflake Gelato's process)
-- Contains: Order line items with establishment, product, sales, tax details
-
-**Schema: `mv_item_details`**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| Establishment | text | Location/store name |
-| Order_Number | bigint | Unique order ID |
-| Order_Date | timestamp without time zone | Order timestamp |
-| Clean_Product_Name | text | Product name |
-| Clean_Class | text | Product category |
-| Total_Sales_Actual | numeric | Total sales (with tax) |
-| Net_Sales_Actual | numeric | Net sales (before tax) |
-| Product_Quantity | integer | Quantity sold |
-| Total_Product_Tax | numeric | Tax amount |
-| Eat_In_Or_Take_Away | text | Order type |
-| Product Type | text | Product type |
-
-**Data Freshness (Phase 1):**
-- AWS materialized view refreshed: **9:00 AM daily**
-- Streamlit cache refresh: **9:30 AM daily** (after AWS refresh completes)
-- Users before 9:30 AM: See previous day's data (acceptable for MVP)
-- Users after 9:30 AM: See current day's data (fresh)
-
-**Loading Strategy:**
+### Transaction
 ```python
-@st.cache_resource(ttl=86400)  # 24 hours
-def load_transactions():
-    """
-    Loads 5 years of data at 9:30 AM daily.
-    ~39M rows, 30-60 second load time.
-    Cached for 24 hours, shared across all users.
-    """
-    return query_aws_database(years=5)
+id: str                    # MD5 hash(date|description|amount|account)
+date: datetime
+description: str
+amount: float
+balance: float
+account_number: str
+category: Optional[str]
+category_confidence: Optional[float]
+category_confirmed: bool   # True if user confirmed
 ```
 
-**User Experience:**
-- First user after 9:30 AM: 30-60 seconds (triggers cache refresh)
-- All subsequent users: **INSTANT** (app-level cache)
-- Admin override: Manual "Reload Data" button for mid-day updates
-
-### Future State (Phase 2/3)
-**Neon PostgreSQL + Toast SFTP Ingestion:**
-- Toast POS → SFTP export → Neon database (incremental ETL)
-- Neon → Streamlit (daily cache refresh)
-
-**Data Freshness (Phase 2 - TBD):**
-- **Depends on Toast SFTP export schedule** (need to confirm with client)
-- **Scenario A:** If Toast exports at midnight → Data available by **1:00 AM** (8 hours earlier than Phase 1)
-- **Scenario B:** If Toast exports at 6:00 AM → Data available by **7:00 AM** (2 hours earlier)
-- **Scenario C:** If Toast exports hourly → Near real-time updates possible
-
-**Questions for Client (Phase 2 Planning):**
-1. What time does Toast POS export to SFTP? (midnight, 6 AM, 9 AM?)
-2. Is export end-of-day batch or hourly incremental?
-3. Business requirement: Is 9 AM acceptable long-term, or need earlier?
-4. Intraday updates needed? (e.g., lunch rush monitoring at 1 PM)
-
-**ETL Timeline (Phase 2 Example):**
-```
-12:00 AM - Toast exports to SFTP
-12:05 AM - SFTP files ready
-12:30 AM - ETL job ingests → Neon (15-20 min processing)
-12:50 AM - Neon data ready
-1:00 AM  - Streamlit cache refresh
-7:00 AM  - Users arrive with fresh data from previous day
+### Category
+```python
+id: str
+name: str
+description: str
+parent_id: Optional[str]   # For hierarchical categories
 ```
 
-## DAX Measures to Recreate
-[PENDING - Need 3-5 examples from user]
-
-Key measure types:
-- YTD calculations
-- YoY comparisons
-- Budget variance
-- Fiscal week aggregations
-- Time intelligence functions
-
-## Reports to Build
-
-### Weekly Report (5 pages)
-- Power BI matrices to recreate
-- [Structure TBD]
-
-### Monthly Report (5-6 pages)
-- Power BI matrices to recreate
-- [Structure TBD]
-
-## Development Approach
-- Skip heavy SDLC for MVP
-- Build → Test → Deploy iteratively
-- Production-grade code from start
-- Separation of concerns (UI-agnostic business logic)
-- Type hints everywhere
-- Test fiscal calendar against Power BI outputs
+### Rule
+```python
+pattern: str               # Regex pattern to match description
+category_id: str
+priority: int              # Higher priority = checked first
+```
 
 ## Project Structure
 ```
-casualhero/
+personal-finance/
+├── app.py                          # Main Dash application
+├── run_ai_categorization.py        # Background AI script
 ├── src/
-│   ├── core/
-│   │   ├── fiscal_calendar.py    # Fiscal year/week calculations
-│   │   └── kpi_calculator.py     # DAX → Polars translations
 │   ├── data/
-│   │   ├── connector.py          # Database connection
-│   │   └── queries.py            # SQL queries
-│   ├── ui/
-│   │   ├── pages/
-│   │   │   ├── weekly_report/    # 5 pages
-│   │   │   └── monthly_report/   # 5-6 pages
-│   │   └── app.py                # Main Streamlit app
-│   └── config/
-│       └── settings.py           # Configuration
-├── tests/
-│   ├── test_fiscal_calendar.py   # CRITICAL: Validate against Power BI
-│   └── test_kpi_calculator.py
-├── claude.md                      # This file
-├── requirements.txt
-├── Dockerfile
-└── README.md
+│   │   ├── database.py             # SQLite connection + queries
+│   │   ├── models.py               # Pydantic models
+│   │   └── parser.py               # NatWest CSV parser
+│   ├── core/
+│   │   ├── categorizer.py          # Hybrid categorization engine
+│   │   ├── rule_matcher.py         # Pattern matching logic
+│   │   └── progress_tracker.py     # Background progress tracking
+│   ├── ml/
+│   │   └── ai_categorizer.py       # Claude AI integration
+│   └── utils/
+│       └── categories.py           # Default category setup
+├── scripts/
+│   ├── init_database.py            # Initialize fresh database
+│   ├── fix_confidence_values.py    # Fix existing data (one-time)
+│   └── debug_rule_filter.py        # Debug filtering issues
+├── data/
+│   ├── finance.db                  # SQLite database
+│   └── ai_progress.json            # Progress tracking file
+├── .env                            # APP_ANTHROPIC_API_KEY (gitignored)
+└── requirements.txt
 ```
 
-## Current Status - Week 1 Progress
+## Current Status
 
-### ✅ COMPLETED (Session 1 - Nov 4, 2025)
+### ✅ COMPLETED (Latest Session)
 
-**1. Fiscal Calendar Module** (`src/core/fiscal_calendar.py`)
-- ✅ Config-driven approach (YAML file, not hardcoded)
-- ✅ `adjust_for_cutoff(timestamp)` - 7AM cutoff rule implemented
-- ✅ `get_week1_start(fiscal_year)` - Lookup from config
-- ✅ `get_fiscal_year(date)` - Determine fiscal year
-- ✅ `get_fiscal_week(date)` - Calculate week number (1-52/53)
-- ✅ `get_fiscal_info(date)` - Comprehensive fiscal data
-- ✅ TESTED: FY2024 boundaries, 7AM cutoff working correctly
-- ✅ Production-ready: type hints, docstrings, error handling
+**UI/UX Improvements:**
+- Fixed "Confirm" button (now includes confidence=1.0)
+- Fixed "Confirm & Create Rule" button (now includes confidence=1.0)
+- Moved Rules from collapsible section to dedicated tab
+- Rules tab shows ALL rules without pagination (scrollable)
+- Sticky table headers for better navigation
 
-**2. Fiscal Calendar Configuration** (`config/fiscal_overrides.yaml`)
-- ✅ FY2024, FY2025, FY2026 configured
-- ✅ Protected config file (client-controlled, not developer-controlled)
-- ✅ Week 1 start dates defined
-- ✅ Comments and documentation included
+**Workflow:**
+1. 📥 Import & Categorize Tab:
+   - Step 1: Upload CSV
+   - Step 2: Apply Rules (batch, instant)
+   - Step 3: Start AI Categorization (background with live progress)
 
-**3. Database Connector** (`src/data/connector.py`)
-- ✅ SQLAlchemy-based connection management
-- ✅ Supports BOTH AWS PostgreSQL AND Neon (same code)
-- ✅ Connection pooling (configurable: 10 connections, 20 overflow)
-- ✅ SSL/TLS support (required for AWS RDS and Neon)
-- ✅ Context managers for safe transactions
-- ✅ Error handling with helpful messages
-- ✅ Singleton pattern with `get_db()` function
+2. 📋 Review & Correct Tab:
+   - Filter transactions by status
+   - Edit categories inline
+   - Confirm or Confirm + Create Rule
 
-**4. Query Module** (`src/data/queries.py`)
-- ✅ Template functions for materialized view queries
-- ✅ Returns Polars DataFrames (not pandas)
-- ✅ Fiscal calendar integration (auto-adds fiscal year/week columns)
-- ✅ Schema discovery functions (`get_view_schema()`)
-- ✅ Ready to update once client provides schema
+3. 📊 Statistics Tab:
+   - Transaction counts and category stats
 
-**5. Configuration & Security**
-- ✅ `.env.example` - Complete template for AWS and Neon
-- ✅ `.gitignore` - Protects credentials and sensitive data
-- ✅ `requirements.txt` - All dependencies listed (Polars, DuckDB, SQLAlchemy, PyYAML, etc.)
-- ✅ Security best practices documented
+4. 📝 Rules Tab:
+   - View all rules in one scrollable list
+   - Sort and filter
+   - Auto-refresh
 
-**6. Project Structure**
-- ✅ `src/core/` - Business logic (fiscal calendar)
-- ✅ `src/data/` - Database layer (connector, queries)
-- ✅ `config/` - Configuration files (fiscal overrides)
+### ✅ RESOLVED ISSUES
 
-### ✅ COMPLETED (Session 2 - Nov 5, 2025)
+1. **Claude AI Model 404** - Fixed model name to `claude-3-haiku-20240307`
+2. **Rate Limit 429** - Added 1.4s delay between requests (42/min)
+3. **Confidence Values Not Saved** - Fixed database update calls
+4. **Duplicate Transactions** - Implemented deterministic MD5 IDs
+5. **Process Stuck at 350 Records** - Added retry logic and stall detection
+6. **Confirm Buttons Not Working** - Fixed missing confidence parameter
+7. **Rules Display** - Moved to separate tab, removed pagination
 
-**1. AWS Database Connection**
-- ✅ Connected to AWS RDS PostgreSQL 15.12
-- ✅ Database: `snowflake_sftp`
-- ✅ Endpoint: `snowflake-gelato-db-restored.c31jl8xofey0.eu-west-2.rds.amazonaws.com`
-- ✅ SSL/TLS connection working
-- ✅ Password URL-encoding for special characters
+## Default Categories
 
-**2. Materialized View Discovery**
-- ✅ Found view: `public.mv_item_details`
-- ✅ Schema discovered (11 columns)
-- ✅ Connection test successful
-- ✅ Sample data queried
+### Income
+- Salary
+- Freelance Income
+- Investment Returns
+- Other Income
 
-**3. Schema: `mv_item_details`**
+### Fixed Expenses
+- Rent/Mortgage
+- Utilities
+- Insurance
+- Subscriptions
 
-| Column | Type | Description |
-|--------|------|-------------|
-| Establishment | text | Location/store name |
-| Order_Number | bigint | Unique order ID |
-| Order_Date | timestamp without time zone | Order timestamp |
-| Clean_Product_Name | text | Product name |
-| Clean_Class | text | Product category |
-| Total_Sales_Actual | numeric | Total sales (with tax) |
-| Net_Sales_Actual | numeric | Net sales (before tax) |
-| Product_Quantity | integer | Quantity sold |
-| Total_Product_Tax | numeric | Tax amount |
-| Eat_In_Or_Take_Away | text | Order type |
-| Product Type | text | Product type |
+### Variable Expenses
+- Groceries
+- Dining Out
+- Transportation
+- Entertainment
+- Shopping
+- Healthcare
+- Personal Care
 
-**4. Git Repository Setup**
-- ✅ Private GitHub repository created: `alikhanclear/casualhero-bi`
-- ✅ `.gitignore` protecting credentials
-- ✅ Initial commit pushed
-- ✅ All foundational code in version control
+### Savings & Investments
+- Savings Transfer
+- Investment Contributions
 
-**5. Sample Data Export**
-- ✅ Exported 100 rows from `mv_item_details` to CSV
-- ✅ Verified data structure and column names
-- ✅ Confirmed drilldown and export requirements
+### Debt
+- Loan Payments
+- Credit Card Payments
 
-### ✅ COMPLETED (Session 3 - Nov 5, 2025)
+### Uncategorized
+- Default for unknown transactions
 
-**1. Hosting Platform Decision**
-- ✅ Evaluated 5 hosting options (Streamlit Cloud, Fly.io, Railway, Render, Digital Ocean)
-- ✅ Analyzed RAM requirements for drilldown + export features
-- ✅ **DECISION: Fly.io with 4GB RAM, always-on** (~£20-25/month)
-- ✅ Documented rationale in Key Decisions section
-- ✅ Phase 3 total cost estimate: ~£35/month (within budget)
+## Key Technical Decisions
 
-**2. Power BI Dashboard Analysis**
-- ✅ Analyzed Weekly Report.pdf (12 pages)
-- ✅ Identified branding: Pink/pastel theme with Snowflake logo
-- ✅ Documented Page 2 structure: YoY comparison matrix with 4 metric sections
-- ✅ Identified interactive requirements: drill-down, data bars, conditional formatting
-- ✅ **GOAL: Build "better than Power BI" with enhanced interactivity**
+1. **Deterministic Transaction IDs**
+   - MD5 hash of (date|description|amount|account)
+   - Prevents duplicate imports automatically
+   - Same transaction = same ID = `INSERT OR IGNORE`
 
-**3. Dashboard Requirements Identified**
+2. **Background AI Processing**
+   - Avoids blocking UI during long AI runs
+   - subprocess.Popen with detached process
+   - JSON file polling for progress updates
+   - User can continue using app while AI runs
 
-**Page 2 - Weekly Report Table:**
-- Multi-level grouping: Company → Establishment → Metrics
-- 4 metric sections: Weekly Sales, 4W Avg, Order Volumes, ATV
-- YoY comparisons with variance percentages
-- Conditional formatting: RED/GREEN data bars
-- Currency formatting, percentage formatting
-- Hierarchical totals and subtotals
+3. **Confidence-Based Filtering**
+   - `confidence = 1.0` for trusted (rules/confirmed)
+   - `confidence < 1.0` for AI suggestions (needs review)
+   - `confidence = None` for uncategorized
+   - Enables smart filtering in review tab
 
-**Interactive Enhancements Beyond Power BI:**
-- Click-to-expand drill-down (Company → Establishment → Daily → Transactions)
-- Real-time filtering (week slider, company toggles, search)
-- Smart insights panel (auto-detect patterns, alerts)
-- Export filtered data at any drill level
-- KPI cards with sparklines
-- Animated transitions
-- Mobile responsive
-- Comparison mode (any two periods)
-- Heatmap view option
+4. **Rate Limiting Strategy**
+   - 1.4 second delay between AI requests
+   - Target: 42 requests/min (safely under 50/min limit)
+   - Retry logic: exponential backoff for failures
+   - Timeout: 30 seconds per request
 
-### ✅ COMPLETED (Session 4 - Nov 8, 2025)
+5. **Prompt Caching**
+   - System prompt includes all categories (cached)
+   - 90% cost reduction on repeated requests
+   - Cache valid for 5 minutes
+   - Massive savings for batch processing
 
-**1. KPI Calculator Module** (`src/core/kpi_calculator.py`)
-- ✅ Complete KPI calculation engine built (690 lines)
-- ✅ Weekly Sales calculations (Current Year, Last Year, YoY variance)
-- ✅ 4-Week Average calculations with rolling window logic
-- ✅ Order Volume calculations (unique order count, not line items)
-- ✅ ATV (Average Transaction Value) calculations
-- ✅ Company mapping (SNOWFLAKE, STRT SND, SKYVIEW)
-- ✅ Hierarchical aggregation (Establishment → Company → Grand Total)
-- ✅ Data preparation pipeline with fiscal calendar integration
-- ✅ Production-ready: type hints, docstrings, error handling
+## Environment Setup
 
-**Key Functions Implemented:**
+### Required Environment Variables
+```bash
+APP_ANTHROPIC_API_KEY=sk-ant-...    # Get from console.anthropic.com
+```
+
+### Installation
+```bash
+cd personal-finance
+pip install -r requirements.txt
+python scripts/init_database.py  # First time only
+python app.py                    # Run the app
+```
+
+## Future Features (Roadmap)
+
+### 🔮 Planned Features
+
+1. **Budget Tracking**
+   - Set monthly/weekly budgets per category
+   - Track spending against budget
+   - Alerts when approaching budget limits
+   - Budget vs. Actual reports
+   - Rollover unused budget to next period
+
+2. **Weekly Transaction Reports**
+   - Generate formatted weekly summaries
+   - Copy-paste friendly format for emails
+   - Include: spending by category, notable transactions, budget status
+   - Export options: Plain text, Markdown, HTML
+   - Scheduled email reports (optional)
+
+3. **Future Enhancements (TBD)**
+   - Multi-bank support (beyond NatWest)
+   - Recurring transaction detection
+   - Trend analysis and forecasting
+   - Custom category hierarchies
+   - Rule suggestions based on manual categorizations
+   - Export to CSV/Excel
+   - Mobile-friendly responsive design
+   - Multi-user support with authentication
+
+## Development Notes
+
+### Running the Application
+```bash
+# Start the Dash server
+python app.py
+
+# Access at: http://localhost:8050/
+```
+
+### Database Management
+```bash
+# Initialize fresh database
+python scripts/init_database.py
+
+# Fix confidence values (one-time migration)
+python scripts/fix_confidence_values.py
+
+# Debug filtering issues
+python scripts/debug_rule_filter.py
+```
+
+### Manual Rule Creation
+Rules are created automatically when you click "Confirm & Create Rule" in the Review tab. The system suggests a pattern based on the transaction description.
+
+## Git Workflow
+
+**Current Branch**: `claude/personal-finance-01VjZZFozL9KrFhnUkEB8B2u`
+
+### Recent Commits
+- Fix confirm buttons and move Rules to separate tab
+- Add retry logic and stall detection for AI categorization
+- Add deterministic transaction IDs for duplicate detection
+- Add background AI categorization with live progress tracking
+- Improve progress tracking and recommend terminal for AI
+
+## Cost Optimization
+
+### AI Categorization Costs
+- **Without Prompt Caching**: ~$0.0005 per transaction
+- **With Prompt Caching**: ~$0.00005 per transaction (90% reduction)
+- **Estimated Monthly Cost** (1000 new transactions): ~$0.05/month
+
+### Best Practices
+1. Always run Rule-Based categorization first (free)
+2. Only use AI for uncategorized transactions
+3. Create rules from confirmed transactions to reduce future AI usage
+4. Use batch processing (background mode) for large imports
+
+## Troubleshooting
+
+### Issue: Transactions not appearing after upload
+- Check upload status message for errors
+- Verify database file exists in `data/finance.db`
+- Check browser console for errors
+- Try refreshing the page
+
+### Issue: AI categorization stuck
+- Check `data/ai_progress.json` for status
+- Look for "stall detected" warning in UI
+- Check API key is valid in `.env`
+- Check internet connection
+- Review terminal output for errors
+
+### Issue: Duplicate transactions
+- Should be prevented automatically via MD5 IDs
+- If seeing duplicates, check if any fields changed (amount, date, etc.)
+- Delete `data/finance.db` and start fresh if needed
+
+### Issue: Confirm buttons not working
+- **FIXED** in latest commit
+- Ensure you've pulled latest code
+- Check confidence values are being saved
+
+---
+
+**Last Updated**: January 12, 2026
+**Current Session**: Phase 1 - Move & Rename to Personal Manager
+**Current Branch**: `personal-finance/dash-no-aggrid`
+
+## ✅ Completed Sessions
+
+### Session: Jan 12, 2026 - Phase 1: Move & Rename to Personal Manager
+
+**Status**: ✅ COMPLETE - No Breaking Changes
+
+**Summary**: Relocated project to cleaner directory structure and rebranded from "Personal Finance Manager" to "Personal Manager" in preparation for multi-module architecture.
+
+---
+
+**Major Changes:**
+
+**1. Directory Relocation**
+- **OLD**: `C:\Users\azimu\Documents\013. Personal Finance Tool\casualhero-bi\personal-finance-fresh\personal-finance`
+- **NEW**: `C:\Users\azimu\Documents\016. Personal Manager\personal-manager`
+- Git history preserved completely
+- Remote tracking maintained (GitHub)
+- Database copied intact (569 rules, 80 categories, 4,593 transactions)
+
+**2. Branding Update - "Personal Manager"**
+- Updated app title and headers throughout UI
+- Browser tab now shows "Personal Manager"
+- Console startup message displays new branding
+- All user-facing text updated
+
+**Files Modified:**
+- `app.py` - 4 branding changes (lines 2, 68, 206, 4274)
+- `README.md` - Complete rebrand (to be updated)
+- `.env` + `.env.example` - Comments updated, added APP_ROOT_DIR variable
+- `requirements.txt` - Header comment updated
+- `config/default_categories.py` - Docstring updated
+- `run_tests.py` - Docstring updated
+- `tests/__init__.py` - Docstring updated
+- `tests/test_simple_verification.py` - Test return string updated
+
+**3. Path Fixes**
+- **Fixed**: `scripts/check_charity_rules.py` - Removed absolute Windows path
+- **Before**: `sys.path.insert(0, 'C:\\Users\\azimu\\Documents\\013...')`
+- **After**: `sys.path.insert(0, str(Path(__file__).parent.parent))`
+- All paths now relative using `Path(__file__)`
+
+**4. Environment Variables**
+- Added `APP_ROOT_DIR` to `.env` and `.env.example`
+- Optional variable for external script integrations
+- Value: `C:\Users\azimu\Documents\016. Personal Manager\personal-manager`
+
+---
+
+**Testing Completed:**
+
+✅ **Database Integrity** (Pre & Post):
+- Rules: 569 ✓
+- Categories: 80 ✓
+- Transactions: 4,593 ✓
+- Potential Duplicates: 41 ✓
+- Database size: 1.88 MB ✓
+
+✅ **Python Module Imports**:
+- Data models (Transaction, Category, Rule) ✓
+- Database manager (FinanceDatabase) ✓
+- Rule engine (RuleEngine) ✓
+- Categorizer (HybridCategorizer) ✓
+- CSV parser (NatWestParser) ✓
+- Default categories (55 categories loaded) ✓
+
+✅ **Script Functionality**:
+- `scripts/check_charity_rules.py` runs without errors ✓
+- Relative paths working correctly ✓
+- No import errors ✓
+
+✅ **Application Startup**:
+- Server starts on http://localhost:8050/ ✓
+- Branding displays "Personal Manager" ✓
+- Database path resolves correctly ✓
+- No startup errors ✓
+
+✅ **Functional Operations**:
+- Categories retrieved successfully (80) ✓
+- Rules retrieved successfully (569) ✓
+- Transactions loaded (4,593) ✓
+- Rule engine initialized ✓
+
+---
+
+**What Was NOT Changed (By Design):**
+- ❌ No architectural refactoring (saved for Phase 2)
+- ❌ No sidebar navigation (Phase 2)
+- ❌ No module structure/directory (Phase 2)
+- ❌ No URL-based routing (Phase 2)
+- ❌ Historical references in CLAUDE.md preserved (documentation integrity)
+- ❌ Database schema unchanged
+- ❌ Git branch name unchanged (`personal-finance/dash-no-aggrid`)
+
+---
+
+**Rationale for Changes:**
+
+The project is evolving from a single-purpose "Personal Finance Manager" to a multi-module "Personal Manager" platform that will include:
+- Finance Tracker (current module)
+- Invoice Generation (future)
+- Additional business automation tools (future)
+
+Phase 1 establishes the foundation with:
+- Clean directory structure
+- Generic branding that supports multiple modules
+- Relative paths for portability
+- Zero breaking changes to existing functionality
+
+---
+
+**Future Phases:**
+
+**Phase 2 (Planned):**
+- Sidebar navigation for module selection
+- Create `modules/` directory structure
+- Move Finance Tracker into `modules/personal_finance/`
+- URL-based routing (`/finance`, `/invoices`, etc.)
+- Shared database with module namespacing
+
+**Phase 3 (Planned):**
+- Invoice Generation module
+- Template management
+- Client tracking
+- PDF export
+
+---
+
+**Git Commit**: `[Pending]`
+**Branch**: `personal-finance/dash-no-aggrid`
+**Files Changed**: 8 files modified
+**Lines Changed**: ~50 lines (branding updates only)
+
+**Key Achievement**: **ZERO BREAKING CHANGES** - All existing functionality preserved!
+
+---
+
+### Session: Nov 23, 2025 - Rule Engine Rewrite
+
+**Major Changes:**
+
+1. **Removed All Auto-Refresh Behavior**
+   - Review & Correct tab no longer auto-refreshes after category changes
+   - User has complete manual control via "Refresh" button
+   - Added success messages: "✓ Category changed to 'X'. Click 'Refresh' to see changes."
+   - **Files**: `app.py` (callbacks: `save_review_category_change`, `batch_confirm`, etc.)
+
+2. **Rewrote Rule Matching Engine (Whole-Word Token Matching)**
+   - **Problem**: Pattern "TFL" was matching "NETFLIX" (substring match)
+   - **Solution**: Token-based matching using `re.split(r'[\s,*\-./\\|()]+', ...)`
+   - Pattern must match complete tokens, not substrings
+   - Examples:
+     - "NETFLIX" matches "PAYPAL *NETFLIX" ✓
+     - "TFL" does NOT match "NETFLIX" ✗
+     - "TFL" matches "TFL TRAVEL" ✓
+   - **Files**: `src/core/rule_engine.py` (complete rewrite of `_matches_pattern()`)
+
+3. **Added "Force Re-categorize" Feature**
+   - New checkbox in Rules tab
+   - **Default OFF**: Protects confirmed transactions
+   - **Enabled**: Re-categorizes ALL transactions including confirmed ones
+   - Use case: Fix mistakes, apply new rules to everything
+   - **Files**: `app.py` (UI + callback), `src/core/categorizer.py` (`force_recategorize` parameter)
+
+4. **Implemented Bulk Rule Deletion**
+   - Added checkboxes to Rules table (`row_selectable='multi'`)
+   - New button: "🗑️ Delete Selected Rules"
+   - Deletes rules permanently from database
+   - **Files**: `app.py` (callback: `delete_selected_rules`)
+
+5. **Added "Add New Rule" Feature**
+   - New button: "➕ Add New Rule"
+   - Modal dialog with form: Pattern, Category dropdown, Priority
+   - **Files**: `app.py` (modal UI + callbacks: `toggle_add_rule_modal`, `save_new_rule`)
+
+6. **Aligned All Buttons in Rules Tab**
+   - Used `dbc.ButtonGroup` for clean layout
+   - Buttons: Add New Rule, Refresh, Delete Selected, Re-categorize ALL, Export to Excel
+   - **Files**: `app.py` (line ~496-508)
+
+7. **Fixed Broken Netflix Rule**
+   - **Problem**: category_id stored as "Streaming Services" (name) instead of UUID
+   - **Fix**: Updated database to use proper UUID
+   - Created debug scripts: `check_all_rules.py`, `fix_netflix_quick.py`
+   - **Result**: All 12 Netflix transactions now correctly categorized
+
+8. **Fixed `case_insensitive_value` Error**
+   - Removed reference to deleted UI component
+   - Hardcoded default: case-insensitive filtering
+   - **Files**: `app.py` (line 950, line 999)
+
+**Key Lesson Learned:**
+- ✅ **Categorization should be driven from Rules tab with force re-categorize**
+- ❌ Doing it transaction-by-transaction in Review & Correct tab is inefficient
+- **Best workflow**: Fix rules → Force re-categorize ALL → Review outliers
+
+**Debug Scripts Created:**
+- `scripts/debug_netflix.py` - Check Netflix transactions
+- `scripts/debug_all_rules.py` - Show all rules and test matching
+- `scripts/test_token_matching.py` - Test whole-word matching (13/13 tests passed)
+- `scripts/check_all_rules.py` - Check for broken category_ids
+- `scripts/fix_netflix_quick.py` - Fix broken Netflix rule
+
+---
+
+### Session: Nov 22, 2025 - Duplicate Detection System
+
+**Completed:**
+
+1. **Fixed "Re-categorize ALL with Rules" Button**
+   - **OLD**: Overwrote ALL categorizations including AI suggestions
+   - **NEW**: Only processes uncategorized + rule-matched transactions
+   - **Preserves**: AI suggestions (confidence<1.0) and user confirmations
+
+2. **Added "Purge All Transactions" Feature**
+   - New button in Rules tab with confirmation modal
+   - Deletes ALL transactions, preserves rules and categories
+   - Use case: Start fresh with new CSV while keeping learned rules
+
+3. **Implemented Duplicate Detection & Review System**
+   - **Problem Solved**: MD5 hash-based IDs were silently skipping duplicates
+   - Same transaction twice in one day (e.g., 2 coffees) was being lost
+   - **New System**:
+     - Database table: `potential_duplicates`
+     - New tab: "🔍 Review Duplicates"
+     - Upload message shows: "⚠️ Potential duplicates: X"
+     - User actions: "Keep Both" or "Dismiss"
+   - **Files Changed**:
+     - `src/data/models.py` - Added PotentialDuplicate model
+     - `src/data/database.py` - Added duplicates table + methods
+     - `app.py` - New tab + callbacks for duplicate review
+
+---
+
+## 🔴 PRIORITY FOR NEXT SESSION (Nov 24, 2025)
+
+### Excel/CSV Import for Rules (Bulk Rule Management)
+
+**Problem**:
+- Currently, rules can only be added one-by-one via UI modal
+- No way to bulk upload or manage large rule sets
+- Difficult to maintain rules in version control or share with others
+
+**Solution**: Add Excel/CSV import functionality in Rules tab
+
+**Two Import Modes:**
+
+1. **Mode 1: Overwrite All Rules (Replace)**
+   - Deletes ALL existing rules from database
+   - Imports new rules from CSV/Excel file
+   - Use case: Complete rule set replacement, reset to clean state
+   - **Warning required**: "This will DELETE all X existing rules. Continue?"
+
+2. **Mode 2: Incremental/Batch Add (Append)**
+   - Keeps existing rules in database
+   - Adds new rules from CSV/Excel file
+   - Handles duplicates: Skip if pattern + category already exists
+   - Use case: Adding new rules without losing existing ones
+
+**CSV/Excel Format:**
+```csv
+pattern,category,priority
+NETFLIX,Streaming Services,10
+TFL,Public Transport,10
+TESCO,Groceries,10
+AMAZON,Shopping,5
+```
+
+**Implementation Notes:**
+- Add "📥 Import Rules" button in Rules tab ButtonGroup
+- Modal dialog with:
+  - File upload (CSV or Excel)
+  - Radio buttons: "Replace All Rules" or "Add New Rules"
+  - Preview table showing parsed rules
+  - Validation: Check category names exist, valid priority values
+- Use Polars to parse CSV/Excel (fast, robust)
+- Map category names to UUIDs before insert
+- Show summary: "✓ Imported X rules (Y skipped as duplicates)"
+
+**Files to Modify:**
+- `app.py` - Add upload UI, callbacks for import
+- `src/data/database.py` - Add `import_rules()` and `replace_all_rules()` methods
+
+**Benefits:**
+- Backup/restore rule sets easily
+- Share rules across environments (dev/prod)
+- Version control rules in Git (CSV file)
+- Bulk edit in Excel, re-import
+- Faster onboarding (import pre-configured rules)
+
+---
+
+## 📋 Future Enhancements (Backlog)
+
+### Batch Operations in Review & Correct Tab
+- Add checkbox column to transactions table
+- Batch actions: "Confirm Selected", "Confirm & Create Rules Selected"
+- UX: Similar to email clients (Gmail/Outlook style)
+
+### Rule Conflict Detection & Resolution
+- Detect when multiple rules match the same transaction
+- Show warnings when rules overlap (non-blocking)
+- Rule priority strictly enforced (first match wins)
+
+### Other Priorities
+- Budget tracking and weekly reports implementation
+- Performance optimization for large datasets
+- Export enhancements
+
+---
+
+## 🚨 NEXT SESSION - START HERE FIRST! 🚨
+
+**Date**: November 25, 2025
+**CRITICAL PRIORITY**: Regression Testing & Progress Window Completion
+
+### ⚠️ MUST DO BEFORE ANY NEW WORK:
+**The user does NOT want to break existing functionality. Regression testing is CRITICAL.**
+
+### Session Goals:
+1. **REGRESSION TEST EVERYTHING** (highest priority)
+   - Test transaction upload (CSV import)
+   - Test transaction type categorization (INT/CHG → Interest and Charges)
+   - Test rule matching
+   - Test AI categorization (verify it doesn't overwrite rule-matched transactions)
+   - Test Excel export with Status column
+   - Test manual categorization in Review & Correct tab
+   - Test rule import/export
+   - Verify all existing features work as before
+
+2. **Complete Progress Window Implementation** (only after regression tests pass)
+   - Add callbacks to show/hide progress modal
+   - Wire up progress polling with dcc.Interval
+   - Connect progress tracker to UI updates
+   - Test progress window during AI categorization
+
+### Work Already Completed (Nov 25, 2025):
+✅ **Transaction Type Categorization**
+- Added INT/CHG → "Interest and Charges" categorization
+- This is now the HIGHEST priority (Step 0, before rules)
+- Files: `src/core/categorizer.py`
+
+✅ **AI Protection**
+- Dual-layer protection to prevent AI from overwriting rule-matched transactions
+- Filter in `app.py` (line 910-915)
+- Skip logic in `categorizer.py` (line 186-194)
+
+✅ **Excel Export Enhancement**
+- Added "Status" column showing: Confirmed, Rule Matched, AI Suggested, Uncategorized
+- File: `app.py` (export function)
+
+✅ **Progress Window Infrastructure (90% complete)**
+- `src/utils/progress_tracker.py` - JSON-based progress tracking
+- Progress modal UI in `app.py` (lines 702-734)
+- `dcc.Interval` component for polling
+- Progress updates in `categorizer.py`
+- **REMAINING**: Callbacks to wire it all together
+
+### Files Modified in This Session:
+1. `app.py` - Added Status column to export, AI protection filter, progress modal UI
+2. `src/core/categorizer.py` - Transaction type check, AI protection, progress tracking
+3. `src/utils/progress_tracker.py` - NEW FILE (progress tracking system)
+4. `scripts/add_interest_charges_category.py` - NEW FILE (utility)
+
+### Testing Checklist for Next Session:
+- [ ] Upload test CSV file
+- [ ] Verify INT/CHG transactions auto-categorize
+- [ ] Apply rules - verify they work
+- [ ] Run AI categorization - verify it doesn't overwrite rules
+- [ ] Export to Excel - verify Status column exists
+- [ ] Manually edit categories in Review & Correct
+- [ ] Test all tabs work without errors
+
+**REMEMBER**: User priority is stability over new features. Test thoroughly!
+
+---
+
+## 🚨 Session: Nov 29, 2025 - Regression Testing Infrastructure
+
+**Status**: Regression testing **DEFERRED** but infrastructure ready
+
+**What Was Built:**
+- ✅ Test database creation script: `scripts/init_test_database.py`
+- ✅ Data copy script: `scripts/copy_categories_rules_to_test.py`
+- ✅ Fresh test database: `data/finance_test.db` (67 categories, 120 rules)
+- ✅ Comprehensive test CSV: `regression_test.csv` (20 transactions with INT/CHG types)
+- ✅ Documented testing procedure
+
+**How to Run Regression Tests (When Ready):**
+1. `python scripts/init_test_database.py` - Create fresh test DB
+2. `python scripts/copy_categories_rules_to_test.py` - Copy categories/rules
+3. Modify `app.py` line 40: `finance.db` → `finance_test.db`
+4. Run tests with `regression_test.csv`
+5. Restore `app.py` to use `finance.db`
+
+**Test Coverage Needed:**
+- [ ] CSV upload functionality
+- [ ] INT/CHG auto-categorization
+- [ ] Rule-based matching (token-based)
+- [ ] AI categorization doesn't overwrite rules
+- [ ] Excel export with Status column
+- [ ] Manual categorization in Review & Correct
+- [ ] All tabs load without errors
+
+**Decision**: User wants to **complete the build first**, regression testing later.
+
+---
+
+## 🚨 Session: Dec 1, 2025 - Rule Recovery & Backup Protection System
+
+**Status**: ✅ CRITICAL RECOVERY COMPLETED
+
+**Crisis**: Database accidentally deleted, 260 custom rules lost (322 → 62 default rules)
+
+**Root Cause**:
+- User deleted `data/finance.db` during cleanup
+- App auto-created fresh database with only 62 default rules from `create_default_rules()`
+- Rules exist ONLY in database (not in git, code, or config files)
+- Lost 260 custom rules (80% of total rules!)
+
+**Recovery Process**:
+1. ✅ Found backup export from Nov 29: `rules_20251129_105930.xlsx` (322 rules)
+2. ✅ Created restoration script: `scripts/restore_rules_from_export.py`
+3. ✅ Auto-created 13 missing categories (Airlines, Clearthread, Debt repayment, etc.)
+4. ✅ Successfully restored all 322 rules
+5. ✅ Database verified: 324 rules (322 restored + 2 new), 68 categories
+
+**Backup Protection System Implemented**:
+Created `src/utils/backup.py` with **4 layers of protection**:
+
+1. **Auto Backups** (`backups/` folder)
+   - Timestamped Excel files
+   - Keeps last 10 backups
+   - Created automatically on rule changes
+
+2. **Git-Tracked Master** (`rules_master.csv`)
+   - CSV format for easy diffs
+   - Committed to version control
+   - Sorted by priority and pattern
+
+3. **Manual Exports** (Downloads folder)
+   - User-initiated exports via UI
+   - Timestamped with metadata
+
+4. **Database Snapshots**
+   - Full database backups before destructive operations
+
+**Key Functions Added**:
 ```python
-- prepare_transaction_data()      # 7AM cutoff + fiscal calendar
-- calculate_weekly_sales()        # YoY sales comparison
-- calculate_4week_avg()           # Rolling 4-week average
-- calculate_order_volumes()       # Order count (not items)
-- calculate_atv()                 # Sales / Order count
-- calculate_weekly_report()       # Combines all metrics
-- add_company_totals()            # Subtotals by company
-- add_grand_total()               # Grand total row
+create_rules_backup(db, description)  # Auto backup with cleanup
+create_master_rules_file(db)          # Git-tracked CSV
+export_rules_to_downloads(db)         # Manual export
+cleanup_old_backups()                 # Keep last 10
 ```
 
-**2. Infrastructure Decisions**
-- ✅ Upgraded to 8GB RAM on Fly.io (from 4GB)
-- ✅ Phase 3 cost target ACHIEVED: £30/month (Neon + Fly.io)
-- ✅ RAM options evaluated (8GB/16GB/32GB)
-- ✅ Phase 1 cost: ~£40/month (AWS RDS + Fly.io)
-- ✅ Phase 3 cost: ~£30/month (Neon + Fly.io) - IDEAL TARGET MET!
+**Files Created/Modified**:
+- ✅ `src/utils/backup.py` - NEW (backup system)
+- ✅ `scripts/restore_rules_from_export.py` - NEW (recovery script)
+- ✅ `rules_master.csv` - NEW (git-tracked master backup - 322 rules)
+- ✅ `backups/rules_post_restore_20251201_191430.xlsx` - Initial backup
 
-**3. Weekly Report Analysis**
-- ✅ Analyzed Power BI Weekly Report PDF (12 pages)
-- ✅ Identified core report structure (Page 2: YoY comparison matrix)
-- ✅ Mapped metrics: Weekly Sales, 4W Avg, Order Volumes, ATV
-- ✅ Documented conditional formatting requirements (RED/GREEN bars)
-- ✅ Power BI benchmark values extracted for FY26 Week 4:
-  - Meadowhall: £8,894 sales, 1,155 orders, £7.70 ATV
-  - The O2: £8,737 sales, 933 orders, £9.36 ATV
-  - Westfield: £18,629 sales, 2,282 orders, £8.16 ATV
+**Errors Fixed During Development**:
+1. UnicodeEncodeError - Replaced emoji in print statements with ASCII
+2. AttributeError (engine) - Used `db._get_connection()` context manager
+3. AttributeError (_generate_uuid) - Imported `uuid4()` directly
 
-**4. Reverse-Engineered Calculations**
-- ✅ Built KPI calculations based on standard BI logic (NOT DAX yet)
-- ✅ Assumptions documented:
-  - Weekly Sales = SUM(Net_Sales_Actual) for fiscal week
-  - 4W Avg = AVG(weekly sales) for last 4 weeks
-  - Order Volumes = COUNT(DISTINCT Order_Number)
-  - ATV = Total Sales / Order Count
-  - YoY Variance = (Current - Last) / Last
-- ⚠️ NEEDS VALIDATION against actual Power BI DAX measures
+**Lessons Learned**:
+- ⚠️ **Rules are database-only** - No fallback in code/git before this session
+- ⚠️ **SQLite deletion is permanent** - No recycle bin for database files
+- ✅ **Multiple backup layers essential** - Git-tracked + auto-backups + manual exports
+- ✅ **Backup verification critical** - Always verify restoration works
 
-**5. Project Organization**
-- ✅ Created `scripts/` directory for test/utility files
-- ✅ Moved all test scripts to `scripts/`:
-  - `test_weekly_report.py` - Weekly report validation
-  - `test_schema.py` - Database schema testing
-  - `check_env.py`, `debug_schema.py` - Utilities
-  - `fetch_sample_data.py`, `export_sample.py` - Data exports
-- ✅ Cleaner project root structure
+**Current Database State**:
+- **Rules**: 324 (fully protected with 4-layer backup system)
+- **Categories**: 68 (55 original + 13 custom)
+- **Transactions**: 0 (need to re-import NatWest CSVs)
 
-### ✅ COMPLETED (Session 5 - Nov 9, 2025)
+**Budget Tracking Implementation**: Paused (plan exists in `optimized-purring-parasol.md`)
 
-**MAJOR MILESTONE: Migrated from Streamlit to Dash**
-
-**1. UI Framework Migration**
-- ✅ Migrated entire UI layer from Streamlit to Dash
-- ✅ Created `src/ui/dash_app.py` (483 lines) - production-grade BI dashboard
-- ✅ Preserved ALL business logic (kpi_calculator, fiscal_calendar, queries unchanged)
-- ✅ Zero changes to data layer or core calculations
-
-**Why Migrated:**
-- Streamlit limitations with interactive tables and conditional formatting
-- Tried AG Grid (streamlit-aggrid) - JavaScript rendering issues
-- Tried Perspective - iframe rendering issues
-- Tried Pandas Styler - Streamlit strips CSS styling
-- **Decision**: Migrate to Dash for production-quality BI dashboards
-
-**2. Dash Implementation Complete**
-
-**Home Page:**
-- ✅ Quick stats cards (Total Orders, Total Sales, Establishments)
-- ✅ Current fiscal period display
-- ✅ Data summary sidebar
-- ✅ Bootstrap navigation with pink Snowflake branding (#FF6B9D)
-
-**Weekly Report Page:**
-- ✅ Fiscal year/week dropdown selectors
-- ✅ Interactive DataTable with all features:
-  - Native sorting (click column headers)
-  - Native filtering (search boxes)
-  - Pagination (20 rows per page)
-  - Excel export button
-- ✅ **Conditional formatting (Power BI style):**
-  - Green backgrounds (#90EE90) for positive variance
-  - Red backgrounds (#FFB6C1) for negative variance
-  - Dark green text (#006400) for positive values
-  - Dark red text (#8B0000) for negative values
-  - Applied to all 4 variance columns (Sales, 4W Avg, Volume, ATV)
-- ✅ **Number formatting:**
-  - Sales: Whole numbers with thousands separators (e.g., "12,345")
-  - ATV: 2 decimal places (e.g., "12.34")
-  - Variance: 2 decimal places (e.g., "33.52")
-
-**3. Data Loading & Performance**
-- ✅ App-level caching (global DATA_CACHE dictionary)
-- ✅ Data loads once at startup: 1,657,933 transactions in ~80-120s
-- ✅ Report generation: <100ms (cached data, instant filtering)
-- ✅ Callback-based architecture (Dash patterns)
-
-**4. Deployment Ready**
-- ✅ `app.server` exposed for WSGI deployment (Gunicorn/Fly.io)
-- ✅ Debug mode for development
-- ✅ Production-ready code structure
-- ✅ requirements.txt updated with Dash dependencies
-
-**5. Files Created/Modified**
-- ✅ `src/ui/dash_app.py` - NEW (complete Dash application)
-- ✅ `requirements.txt` - Added dash==3.2.0, dash-bootstrap-components==2.0.4
-
-**Current Status:**
-- ✅ Dash server running on http://localhost:8050/
-- ✅ All features working (conditional formatting, number formatting)
-- ✅ **Data bars implemented** - Power BI style horizontal bars (gradient from center)
-- ✅ Positive variance: Green bars grow right from center
-- ✅ Negative variance: Red bars grow left from center
-- ✅ User tested and approved
-- ✅ Ready for next phase
-
-**Data Bars Fix:**
-- Initial implementation: Whole cell backgrounds (green/red)
-- User feedback: "whole cells are shaded not bars"
-- Final implementation: CSS gradient bars from center (linear-gradient)
-- Result: True Power BI-style data bars showing magnitude
-
-**Next Phase:** Monthly Report implementation → Trends page → Deployment
-
-### 🔄 RESOLVED (Session 4 Issues)
-
-**Current State: Testing KPI Calculator**
-
-Created `scripts/test_weekly_report.py` to validate calculations against Power BI report.
-
-**Issues Encountered & Fixed:**
-1. ✅ Unicode encoding errors on Windows console (checkmarks/symbols)
-   - Solution: Replaced with ASCII alternatives ([OK], PASS/FAIL)
-2. ✅ Polars table display Unicode box-drawing characters
-   - Solution: Skipped dataframe previews to avoid encoding issues
-3. ✅ `map_dict()` doesn't exist in Polars
-   - Solution: Changed to `.replace()` method
-4. ✅ Data type mismatch (Int32 vs Int64)
-   - Solution: Changed fiscal calendar return types to Int64
-5. 🔄 **CURRENT ISSUE**: Join column conflicts when combining metrics
-   - Error: `column with name 'Company_right' already exists`
-   - Attempted fix: Changed to `how='full'` with `coalesce=True`
-   - Status: NEEDS TESTING
-
-**Exact Stopping Point:**
-- File: `src/core/kpi_calculator.py` line 523-549
-- Function: `calculate_weekly_report()` - join logic
-- Next action: Run `python scripts/test_weekly_report.py` to verify fix
-
-**What Works:**
-- ✅ Data loading (100 rows sample CSV)
-- ✅ Company mapping
-- ✅ 7AM cutoff and fiscal calendar calculations
-- ✅ Individual metric calculations (weekly sales, 4W avg, volumes, ATV)
-
-**What Needs Testing:**
-- 🔄 Joining all metrics into single report
-- 🔄 Company totals aggregation
-- 🔄 Grand total calculation
-- 🔄 Comparison with Power BI values
-
-**Next Steps for Tomorrow:**
-1. **IMMEDIATE**: Test fixed join logic in `calculate_weekly_report()`
-2. Verify calculations match Power BI report (FY26 Week 4)
-3. Fix any remaining discrepancies
-4. **CRITICAL**: Get actual DAX measures from Power BI for validation
-5. Document differences between our logic and Power BI DAX
-6. Build Streamlit UI for Weekly Report page
-7. Add conditional formatting (RED/GREEN bars)
-
-### ⏳ NEXT STEPS - Phase 1B: Build KPI Calculator
-
-**Prerequisites from Client:**
-1. **DAX Measure Examples (3-5 measures)**
-   - YTD calculations
-   - YoY comparisons
-   - Budget variance formulas
-   - Any time intelligence functions
-   - Export from Power BI → Model → Manage measures
-
-2. **Power BI Dashboard Screenshots**
-   - Weekly report (5 pages) - annotated with what each chart shows
-   - Monthly report (5-6 pages) - annotated with data sources
-   - Matrix/table layouts with column names visible
-
-**Development Tasks:**
-1. Create `src/core/kpi_calculator.py`
-2. Translate DAX measures to Polars/DuckDB expressions
-3. Build test cases comparing against Power BI outputs
-4. Validate all calculations match exactly
-
-### ⏳ FUTURE PHASES
-
-**Phase 1C: Build Streamlit Dashboard**
-1. Create `src/ui/app.py` (main Streamlit app)
-2. Implement weekly report (5 pages)
-3. Implement monthly report (5-6 pages)
-4. Deploy to Fly.io
-
-**Phase 1D: MVP Delivery (Target: 2-3 weeks total)**
-- Full like-for-like replacement of Power BI dashboards
-- Validated against Power BI outputs
-- Running on Fly.io
-- Client testing and feedback
-
-## Testing Requirements
-All fiscal calendar calculations MUST match Power BI exactly.
-
-Test cases needed:
-- FY2024 boundaries
-- FY2025 boundaries
-- 7AM cutoff scenarios
-- Edge cases (Oct 1, Sep 30)
-
-## Key Decisions & Notes
-
-### Design Decisions Made
-1. **Fiscal calendar is CONFIG-DRIVEN**
-   - Client controls fiscal year dates via YAML (not developers)
-   - No hardcoded business logic for date calculations
-   - Protected config file (restricted access)
-   - Fail-fast if fiscal year not configured
-
-2. **Database Connector is MIGRATION-READY**
-   - Same code works for AWS PostgreSQL and Neon
-   - Just swap DATABASE_URL environment variable
-   - SSL/TLS enabled by default (required for both AWS and Neon)
-   - Connection pooling optimized for cloud databases
-
-3. **Query Module Uses POLARS (not pandas)**
-   - 5-10x faster for 5-10M row datasets
-   - Lower memory footprint
-   - Lazy evaluation support
-   - Better type system
-
-4. **Security Best Practices**
-   - All credentials in .env file (never in code)
-   - .env is gitignored (won't be committed)
-   - .env.example provides template
-   - AWS connection should use read-only database user
-
-5. **Fly.io for Deployment (8GB RAM, Always-On)**
-   - Chosen over Streamlit Community Cloud for drilldown + export capabilities
-   - 8GB RAM handles large exports and transaction-level drilldowns with headroom
-   - London region (lhr) for low latency to AWS RDS
-   - Always-on configuration (no auto-sleep)
-   - Cost: ~£20/month for 8GB VM
-   - Phase 3 total: ~£30/month (Fly.io + Neon) - MEETS IDEAL TARGET!
-
-   **RAM Options Evaluated:**
-   - 8GB: £20/month (chosen - hits £30 target in Phase 3)
-   - 16GB: £40/month (overkill for current needs)
-   - 32GB: £80/month (at budget limit)
-
-   **Why Fly.io over Streamlit Cloud:**
-   - ✅ 8GB RAM vs 2GB (no export size limits needed)
-   - ✅ UK-based hosting (lower latency to databases)
-   - ✅ Full control over resources and scaling
-   - ✅ Docker-based (better for complex deployments)
-   - ⚠️ Requires Docker configuration (more complex than Streamlit Cloud)
-
-### Business Context
-- Customer: Snowflake Gelato (15 locations)
-- Good relationship, low-risk trial
-- Timeline: 2-3 weeks to MVP
-- Cost target: £30/month ideal, £100/month max
-- Focus: Like-for-like Power BI replacement first
-- Must validate all calculations against Power BI outputs
-
-### Critical Rules Implemented
-- ✅ Fiscal Year: October 1 - September 30
-- ✅ Weeks: Monday - Sunday
-- ✅ 7AM Cutoff: Transactions before 7am count as previous day
-- ✅ Week 1 can start in late September
-- ✅ Sep 30 can be in new fiscal year (e.g., FY2025)
+**Next Steps**:
+1. Re-import transaction CSV files (when user ready)
+2. Test backup system during rule additions/deletions
+3. Resume budget tracking implementation (when prioritized)
 
 ---
 
-## How to Resume Work
+## 🚨 Session: Dec 3-12, 2025 - Analytics Tab & Monthly Spending Visualization
 
-When you return to this project:
+**Status**: ✅ MAJOR FEATURE COMPLETE
 
-1. **Open VS Code** to this folder
-2. **Open Claude Code** (Ctrl+Shift+P → "Claude Code")
-3. **Say**: "Read CLAUDE.md and let's continue where we left off"
+**Summary**: Added comprehensive analytics dashboard with interactive monthly spending charts, transaction drill-down, and PDF export capabilities.
 
-Claude will automatically read this file and understand the full context!
+### Major Features Implemented
+
+**1. Analytics Tab (📈 New Tab)**
+- Monthly spending analysis with visual breakdowns
+- Separate Income and Expense bar charts
+- **Interactive drill-down**: Click any bar to see detailed transactions for that category
+- Real-time transaction filtering by category
+- Month selector dropdown for historical analysis
+- Visual feedback: Charts have pointer cursor to indicate clickability
+
+**2. PDF Export System**
+- Export monthly reports to PDF (A4 landscape format)
+- Custom folder picker using tkinter
+- Folder path display shows current export destination
+- Stored in session state for persistence
+- Report includes: Month header, summary stats, both charts, timestamp
+
+**3. Account Status Display**
+- New section on Import & Categorize tab
+- Shows transaction date ranges per account
+- Displays: Account name, earliest date, latest date, transaction count
+- Helps users understand existing data before importing new CSVs
+- Prevents confusion about what data is already loaded
+
+**4. Summary Statistics**
+- Total Income, Total Expenses, Net Savings
+- Category counts (number of income/expense categories with transactions)
+- Positioned above charts for quick overview
+
+### Database Enhancements
+
+**1. New Method: `get_latest_transaction_per_account()`**
+```python
+Returns: [
+    {
+        'account_name': 'Current Account',
+        'account_number': '12345678',
+        'earliest_date': '2024-01-01',
+        'latest_date': '2025-01-15',
+        'transaction_count': 1523
+    },
+    ...
+]
+```
+- Powers account status display
+- Enables smarter CSV import workflow
+- Helps users avoid duplicate imports
+
+**2. Enhanced `delete_all_transactions()` Method**
+- **NEW**: Account-specific deletion support
+- `delete_all_transactions(account_number='12345678')` - Delete specific account
+- `delete_all_transactions()` - Delete ALL (with caution!)
+- Returns dict with counts: `{'transactions': X, 'duplicates': Y}`
+- Deletes from both `transactions` and `potential_duplicates` tables
+
+**3. Better Duplicate Detection**
+- **CRITICAL FIX**: Transaction ID now includes BALANCE field
+- Previous: `hash(date|description|amount|account)`
+- New: `hash(date|description|amount|balance|account)`
+- **Why**: Prevents false duplicates (e.g., 2 coffees same day, same amount)
+- Same amount + same date BUT different balance = separate transactions
+
+### UI/UX Improvements
+
+**1. Analytics Tab Layout**
+- Two-column design:
+  - Left (60%): Stacked Income/Expense charts
+  - Right (40%): Transaction details panel
+- Click chart bar → Details panel updates with filtered transactions
+- Loading indicators during data refresh
+- Responsive card-based layout
+
+**2. Transaction Details Panel**
+- Initially shows: "Click on a bar to see transactions"
+- After click: Filtered transaction table
+- Shows: Date, Description, Amount (colored by sign)
+- Formatted amounts: Red for expenses, Green for income
+- Bootstrap table styling
+
+**3. Chart Styling**
+- Horizontal bar charts (categories on Y-axis)
+- Income: Green bars (#28a745)
+- Expenses: Red bars (#dc3545)
+- Amounts displayed on bars (formatted as currency)
+- Hover tooltips with exact amounts
+- No mode bar (cleaner look)
+- Pointer cursor indicating interactivity
+
+**4. Create New Category Option**
+- When adding rules: Option to create new category on the fly
+- Checkbox: "Create new category"
+- Shows dropdown OR text input based on toggle
+- Streamlines workflow (no need to visit Statistics tab first)
+
+### Rule Engine Enhancement
+
+**Added Underscore (_) as Delimiter**
+- Previous delimiters: space, asterisk (*), dot (.)
+- New: space, asterisk (*), dot (.), underscore (_)
+- Pattern: `r'[\s*\._]+'`
+- **Why**: Better handling of underscore-separated descriptions (e.g., `MERCHANT_NAME_123`)
+- Maintains whole-word token matching logic
+
+### Technical Implementation
+
+**1. Chart Interactions**
+- Plotly clickData callback captures bar clicks
+- Filters transactions by clicked category
+- Updates details panel reactively
+- Handles both income and expense chart clicks
+
+**2. PDF Generation**
+- Uses matplotlib for chart rendering (not plotly)
+- Converts Plotly figures to matplotlib
+- A4 landscape: 297mm x 210mm
+- Clean layout with proper margins
+- Timestamped filename: `spending_report_YYYY_MM_YYYYMMDD_HHMMSS.pdf`
+
+**3. Month Selection**
+- Dynamically generates list of available months from transaction data
+- Format: "YYYY-MM" (e.g., "2025-01")
+- Dropdown sorted descending (newest first)
+- Selected month triggers chart/data refresh
+
+**4. Folder Picker**
+- tkinter.filedialog.askdirectory()
+- Stores path in dcc.Store (session state)
+- Displays shortened path in UI
+- Falls back to Downloads folder if not set
+
+### Files Created/Modified
+
+**Modified:**
+- ✅ `app.py` (+1,198 lines, -75 lines) - Analytics tab, callbacks, PDF export
+- ✅ `src/data/database.py` (+117 lines) - New methods, enhanced deletion
+- ✅ `src/data/models.py` (+5 lines) - Transaction ID includes balance
+- ✅ `src/core/rule_engine.py` (+6 lines) - Underscore delimiter
+- ✅ `requirements.txt` (+3 lines) - matplotlib dependency
+- ✅ `.claude/settings.local.json` - Updated settings
+
+**Created (Dev/Temp files, not committed):**
+- `pdf_export_callback.py` - Callback code reference
+- `temp_pdf_fix.py` - PDF debugging script
+- `temp_update_charts.py` - Chart testing script
+- `update_pdf_export.py` - Export logic development
+- `scripts/check_duplicates.py` - Duplicate analysis
+- `scripts/check_transaction_counts.py` - Data validation
+- `scripts/clear_false_duplicates.py` - Cleanup utility
+- `scripts/show_duplicate_examples.py` - Duplicate investigation
+
+### New Dependencies
+
+```python
+# requirements.txt additions
+matplotlib>=3.7.0  # For direct PDF generation (no location tracking)
+```
+
+**Also uses (already in requirements):**
+- tkinter (built-in Python) - Folder picker dialog
+- plotly - Interactive charts
+- dash-bootstrap-components - UI layout
+
+### Testing & Validation
+
+**Manual Testing Completed:**
+- ✅ Month selector loads available months
+- ✅ Charts render with correct data
+- ✅ Click on income bar → shows income transactions
+- ✅ Click on expense bar → shows expense transactions
+- ✅ Summary stats calculate correctly
+- ✅ Account status displays transaction ranges
+- ✅ PDF export creates valid A4 landscape files
+- ✅ Folder picker stores/retrieves path
+- ✅ New category creation during rule addition
+
+**Known Limitations:**
+- PDF export requires matplotlib (adds dependency)
+- Folder picker uses tkinter (GUI-based, not web-based)
+- Charts convert from Plotly to matplotlib (slight style differences)
+- No year-over-year comparison yet (future enhancement)
+
+### Git Commit
+
+**Commit Hash**: `fa758f5`
+**Commit Message**: "Add Analytics tab with monthly spending charts and PDF export"
+**Branch**: `personal-finance/dash-no-aggrid`
+**Date**: January 12, 2025
+**Status**: ✅ Pushed to GitHub
+
+### Current Database State
+- **Rules**: 324 (protected with 4-layer backup system)
+- **Categories**: 68 (55 original + 13 custom)
+- **Transactions**: Active dataset (re-imported)
+- **Analytics**: Fully functional with drill-down
+
+### Next Steps
+1. ✅ Document Analytics tab work (this session)
+2. Test PDF export with real data
+3. Consider adding budget tracking integration to Analytics tab
+4. Optional: Add YoY comparison feature
+5. Optional: Add expense trends over time
 
 ---
 
-**Last Updated:** Nov 11, 2025 - Session 7 (Variance Calculation Fixes & Relative Bar Scaling!)
-**Next Session:** Monthly Report implementation → Deployment to Fly.io
-
-**Session 7 Summary:**
-- **CRITICAL FIX**: Resolved "division by zero Decimal" errors in variance calculations
-- **Root Cause**: Polars evaluates Decimal division before conditional logic (when/then/otherwise)
-- **Solution**: Cast Decimal columns to Float64 BEFORE any division operations
-  - Applied to all 6 variance calculation locations in kpi_calculator.py
-  - Float64 handles division gracefully with conditional checks
-- **UI Improvements**:
-  - Removed column header background colors (now bold black text only)
-  - Added try-except error handling with detailed traceback display
-- **Bar Scaling Enhancement**: Implemented relative bar scaling for variance columns
-  - Bars now scale based on max absolute value within each column
-  - Makes differences more visible when values are clustered (e.g., all around 40%)
-  - Formula: `(actual_value / max_abs_value) * 100 * 2`
-  - Bars fill up to ~50% of cell width at maximum value
-- **Testing**: Created comprehensive test scripts
-  - `test_variance_simple.py`: 8 test cases validating variance logic
-  - `test_decimal_division.py`: Demonstrates Decimal vs Float64 issue
-- **Status**: ✅ PRODUCTION READY - All variance calculations working correctly
-
-**Session 6 Summary:**
-- **CRITICAL FIX**: Resolved AWS database timeout issues
-- **Problem**: Original INNER JOIN query was taking 2+ hours and timing out
-- **Solution**: Split-query approach - load data separately, join in Polars
-  - Query 1: Get transactions from `mv_item_details` (fast, simple)
-  - Query 2: Get payment statuses from `PaymentDetails` (fast, small table)
-  - Join + filter in Polars (much faster than PostgreSQL JOIN)
-- **Power BI Query Matching**: Replicated exact Power BI filtering logic
-  - LEFT JOIN (not INNER JOIN)
-  - Exclude 'denied' payments
-  - Keep only 'captured' and 'authorized' statuses
-- **Performance**: Load time reduced from 2+ hours → **30-90 seconds**
-- **Data Volume**: 1.66M transactions (5 fiscal years, filtered)
-- **Fixed Dash Debug Mode**: Disabled reloader to prevent double-loading
-- **Status**: ✅ PRODUCTION READY - Fast, reliable data loading
-
-**Session 5 Summary:**
-- **MAJOR MILESTONE**: Migrated from Streamlit to Dash
-- Created production-grade BI dashboard (dash_app.py - 518 lines)
-- **Data bars implemented**: Power BI-style horizontal gradient bars
-  - Positive variance: Green bars grow right from center
-  - Negative variance: Red bars grow left from center
-  - Bar width = magnitude of variance (using CSS linear-gradient)
-- Number formatting perfect (thousands separators, 2dp for ATV/variance)
-- Interactive table: sorting, filtering, pagination, Excel export
-- Preserved ALL business logic (zero changes to kpi_calculator, fiscal_calendar, queries)
-- Server running successfully on http://localhost:8050/
-- Archived old Streamlit code (moved to archive/)
-- **Status**: ✅ COMPLETE - User tested and approved
-
-**Session 4 Summary:**
-- Built complete KPI calculator (690 lines)
-- Reverse-engineered calculations from Power BI report
-- Infrastructure: Upgraded to 8GB RAM, £30/month Phase 3 target achieved
-- Organized project: moved test files to scripts/ directory
+**Project Location**: `C:\Users\azimu\Documents\016. Personal Manager\personal-manager`
+**Git Repository**: Private repo `personal-finance-fresh`
+**Branch**: `personal-finance/dash-no-aggrid`
+**Database**: `data/finance.db` (SQLite, 1.88 MB)
+**Server**: http://localhost:8050/

@@ -1,35 +1,34 @@
-# ============================================================================
-# CasualHero BI Platform - Python Dependencies
-# ============================================================================
+# Personal Manager - Python Dependencies
 
-# Core Data Processing
-polars>=0.20.0              # High-performance DataFrame library (5-10x faster than pandas)
-pandas>=2.0.0               # DataFrame library (needed for Dash DataTable conversion)
-pyarrow>=14.0.0             # Apache Arrow (needed for Polars → Pandas conversion)
-duckdb>=0.10.0              # In-process SQL analytics database
-
-# Configuration
-pyyaml>=6.0.1               # YAML config parsing (fiscal_overrides.yaml)
-
-# Web Framework
-dash==3.2.0                 # Plotly Dash - Production BI framework
-dash-bootstrap-components==2.0.4  # Bootstrap components for Dash
-gunicorn>=21.2.0            # WSGI server for production deployment
-
-# Visualization
-plotly>=5.18.0              # Interactive charts (Express + Graph Objects)
+# Data processing
+polars>=0.19.0
+pandas>=2.0.0  # Optional, for compatibility
+openpyxl>=3.1.0  # For Excel export
+fastexcel>=0.18.0  # For Excel import with Polars
 
 # Database
-sqlalchemy>=2.0.0           # Database ORM and connection management
-psycopg2-binary>=2.9.9      # PostgreSQL adapter for SQLAlchemy
-pydantic>=2.0.0             # Data validation and settings management
+# SQLite is built into Python, no separate package needed
 
-# Development Tools
-black>=24.0.0               # Code formatter
-mypy>=1.8.0                 # Static type checker
-pytest>=8.0.0               # Testing framework
-pytest-cov>=4.1.0           # Test coverage reports
+# Data validation
+pydantic>=2.0.0
+
+# Web framework (for future API)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Dashboard UI
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+plotly>=5.17.0
+
+# AI/ML (for categorization)
+anthropic>=0.39.0  # Claude Haiku/Sonnet/Opus API (RECOMMENDED)
+# openai>=1.0.0  # Alternative: GPT-4 categorization (not recommended)
+# transformers>=4.35.0  # Alternative: Local LLM (optional)
+# sentence-transformers>=2.2.0  # For embeddings (optional)
 
 # Utilities
-python-dotenv>=1.0.0        # Environment variable management (.env files)
-requests>=2.31.0            # HTTP requests (for cache warmer)
+python-dotenv>=1.0.0  # Environment variables
+
+# PDF Export
+matplotlib>=3.7.0  # For direct PDF generation (no location tracking)
