@@ -762,6 +762,216 @@ cleanup_old_backups()                 # Keep last 10
 
 ---
 
+## 🚨 Session: Dec 3-12, 2025 - Analytics Tab & Monthly Spending Visualization
+
+**Status**: ✅ MAJOR FEATURE COMPLETE
+
+**Summary**: Added comprehensive analytics dashboard with interactive monthly spending charts, transaction drill-down, and PDF export capabilities.
+
+### Major Features Implemented
+
+**1. Analytics Tab (📈 New Tab)**
+- Monthly spending analysis with visual breakdowns
+- Separate Income and Expense bar charts
+- **Interactive drill-down**: Click any bar to see detailed transactions for that category
+- Real-time transaction filtering by category
+- Month selector dropdown for historical analysis
+- Visual feedback: Charts have pointer cursor to indicate clickability
+
+**2. PDF Export System**
+- Export monthly reports to PDF (A4 landscape format)
+- Custom folder picker using tkinter
+- Folder path display shows current export destination
+- Stored in session state for persistence
+- Report includes: Month header, summary stats, both charts, timestamp
+
+**3. Account Status Display**
+- New section on Import & Categorize tab
+- Shows transaction date ranges per account
+- Displays: Account name, earliest date, latest date, transaction count
+- Helps users understand existing data before importing new CSVs
+- Prevents confusion about what data is already loaded
+
+**4. Summary Statistics**
+- Total Income, Total Expenses, Net Savings
+- Category counts (number of income/expense categories with transactions)
+- Positioned above charts for quick overview
+
+### Database Enhancements
+
+**1. New Method: `get_latest_transaction_per_account()`**
+```python
+Returns: [
+    {
+        'account_name': 'Current Account',
+        'account_number': '12345678',
+        'earliest_date': '2024-01-01',
+        'latest_date': '2025-01-15',
+        'transaction_count': 1523
+    },
+    ...
+]
+```
+- Powers account status display
+- Enables smarter CSV import workflow
+- Helps users avoid duplicate imports
+
+**2. Enhanced `delete_all_transactions()` Method**
+- **NEW**: Account-specific deletion support
+- `delete_all_transactions(account_number='12345678')` - Delete specific account
+- `delete_all_transactions()` - Delete ALL (with caution!)
+- Returns dict with counts: `{'transactions': X, 'duplicates': Y}`
+- Deletes from both `transactions` and `potential_duplicates` tables
+
+**3. Better Duplicate Detection**
+- **CRITICAL FIX**: Transaction ID now includes BALANCE field
+- Previous: `hash(date|description|amount|account)`
+- New: `hash(date|description|amount|balance|account)`
+- **Why**: Prevents false duplicates (e.g., 2 coffees same day, same amount)
+- Same amount + same date BUT different balance = separate transactions
+
+### UI/UX Improvements
+
+**1. Analytics Tab Layout**
+- Two-column design:
+  - Left (60%): Stacked Income/Expense charts
+  - Right (40%): Transaction details panel
+- Click chart bar → Details panel updates with filtered transactions
+- Loading indicators during data refresh
+- Responsive card-based layout
+
+**2. Transaction Details Panel**
+- Initially shows: "Click on a bar to see transactions"
+- After click: Filtered transaction table
+- Shows: Date, Description, Amount (colored by sign)
+- Formatted amounts: Red for expenses, Green for income
+- Bootstrap table styling
+
+**3. Chart Styling**
+- Horizontal bar charts (categories on Y-axis)
+- Income: Green bars (#28a745)
+- Expenses: Red bars (#dc3545)
+- Amounts displayed on bars (formatted as currency)
+- Hover tooltips with exact amounts
+- No mode bar (cleaner look)
+- Pointer cursor indicating interactivity
+
+**4. Create New Category Option**
+- When adding rules: Option to create new category on the fly
+- Checkbox: "Create new category"
+- Shows dropdown OR text input based on toggle
+- Streamlines workflow (no need to visit Statistics tab first)
+
+### Rule Engine Enhancement
+
+**Added Underscore (_) as Delimiter**
+- Previous delimiters: space, asterisk (*), dot (.)
+- New: space, asterisk (*), dot (.), underscore (_)
+- Pattern: `r'[\s*\._]+'`
+- **Why**: Better handling of underscore-separated descriptions (e.g., `MERCHANT_NAME_123`)
+- Maintains whole-word token matching logic
+
+### Technical Implementation
+
+**1. Chart Interactions**
+- Plotly clickData callback captures bar clicks
+- Filters transactions by clicked category
+- Updates details panel reactively
+- Handles both income and expense chart clicks
+
+**2. PDF Generation**
+- Uses matplotlib for chart rendering (not plotly)
+- Converts Plotly figures to matplotlib
+- A4 landscape: 297mm x 210mm
+- Clean layout with proper margins
+- Timestamped filename: `spending_report_YYYY_MM_YYYYMMDD_HHMMSS.pdf`
+
+**3. Month Selection**
+- Dynamically generates list of available months from transaction data
+- Format: "YYYY-MM" (e.g., "2025-01")
+- Dropdown sorted descending (newest first)
+- Selected month triggers chart/data refresh
+
+**4. Folder Picker**
+- tkinter.filedialog.askdirectory()
+- Stores path in dcc.Store (session state)
+- Displays shortened path in UI
+- Falls back to Downloads folder if not set
+
+### Files Created/Modified
+
+**Modified:**
+- ✅ `app.py` (+1,198 lines, -75 lines) - Analytics tab, callbacks, PDF export
+- ✅ `src/data/database.py` (+117 lines) - New methods, enhanced deletion
+- ✅ `src/data/models.py` (+5 lines) - Transaction ID includes balance
+- ✅ `src/core/rule_engine.py` (+6 lines) - Underscore delimiter
+- ✅ `requirements.txt` (+3 lines) - matplotlib dependency
+- ✅ `.claude/settings.local.json` - Updated settings
+
+**Created (Dev/Temp files, not committed):**
+- `pdf_export_callback.py` - Callback code reference
+- `temp_pdf_fix.py` - PDF debugging script
+- `temp_update_charts.py` - Chart testing script
+- `update_pdf_export.py` - Export logic development
+- `scripts/check_duplicates.py` - Duplicate analysis
+- `scripts/check_transaction_counts.py` - Data validation
+- `scripts/clear_false_duplicates.py` - Cleanup utility
+- `scripts/show_duplicate_examples.py` - Duplicate investigation
+
+### New Dependencies
+
+```python
+# requirements.txt additions
+matplotlib>=3.7.0  # For direct PDF generation (no location tracking)
+```
+
+**Also uses (already in requirements):**
+- tkinter (built-in Python) - Folder picker dialog
+- plotly - Interactive charts
+- dash-bootstrap-components - UI layout
+
+### Testing & Validation
+
+**Manual Testing Completed:**
+- ✅ Month selector loads available months
+- ✅ Charts render with correct data
+- ✅ Click on income bar → shows income transactions
+- ✅ Click on expense bar → shows expense transactions
+- ✅ Summary stats calculate correctly
+- ✅ Account status displays transaction ranges
+- ✅ PDF export creates valid A4 landscape files
+- ✅ Folder picker stores/retrieves path
+- ✅ New category creation during rule addition
+
+**Known Limitations:**
+- PDF export requires matplotlib (adds dependency)
+- Folder picker uses tkinter (GUI-based, not web-based)
+- Charts convert from Plotly to matplotlib (slight style differences)
+- No year-over-year comparison yet (future enhancement)
+
+### Git Commit
+
+**Commit Hash**: `fa758f5`
+**Commit Message**: "Add Analytics tab with monthly spending charts and PDF export"
+**Branch**: `personal-finance/dash-no-aggrid`
+**Date**: January 12, 2025
+**Status**: ✅ Pushed to GitHub
+
+### Current Database State
+- **Rules**: 324 (protected with 4-layer backup system)
+- **Categories**: 68 (55 original + 13 custom)
+- **Transactions**: Active dataset (re-imported)
+- **Analytics**: Fully functional with drill-down
+
+### Next Steps
+1. ✅ Document Analytics tab work (this session)
+2. Test PDF export with real data
+3. Consider adding budget tracking integration to Analytics tab
+4. Optional: Add YoY comparison feature
+5. Optional: Add expense trends over time
+
+---
+
 **Git Repository**: Private repo `personal-finance-fresh`
 **Database**: `data/finance.db` (SQLite)
 **Server**: http://localhost:8050/
