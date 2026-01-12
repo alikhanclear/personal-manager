@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m \"$(cat <<''EOF''\nRewrite rule matching with whole-word token matching and add force re-categorize\n\nMajor changes:\n1. Rewrote rule engine to use whole-word token matching instead of substring\n   - Pattern \"TFL\" no longer matches \"NETFLIX\" (fixes false positive bug)\n   - Tokenizes descriptions by delimiters (space, comma, asterisk, dot, etc.)\n   - Pattern must match complete tokens, not substrings\n   - Supports multi-word patterns (e.g., \"AMAZON PRIME\")\n\n2. Removed priority-based sorting from rule matching logic\n   - Rules checked in database order (first match wins)\n   - Priority column still exists in database/UI (cleanup later)\n\n3. Added \"Force Re-categorize\" feature\n   - New checkbox in Rules tab to override confirmed transactions\n   - Default: protects confirmed transactions\n   - Force mode: re-categorizes ALL transactions including confirmed ones\n   - Use case: fixing mistakes, applying new rules to everything\n\n4. Removed auto-refresh from Review & Correct tab\n   - Category edits no longer auto-refresh the table\n   - User must click \"Refresh\" button manually to see changes\n   - Prevents losing scroll position during batch edits\n   - Added success messages after save\n\n5. Added debug scripts for testing and troubleshooting\n   - scripts/test_token_matching.py - Test whole-word matching logic\n   - scripts/debug_netflix.py - Debug Netflix categorization issues\n   - scripts/debug_all_rules.py - Show all rules and test matching\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(pip install:*)",
+      "Bash(nul)",
+      "Bash(timeout /t 3)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(ping:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(sqlite3:*)",
+      "Bash(tasklist:*)",
+      "Bash(del datafinance.db-journal)",
+      "Bash(taskkill /F /PID 29788)",
+      "Bash(cat:*)",
+      "Bash(taskkill:*)",
+      "Bash(del update_pdf_export.py pdf_export_callback.py temp_update_charts.py)",
+      "Bash(cmd.exe /c \"taskkill /F /IM python.exe\")",
+      "Bash(find:*)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 74724 & taskkill /F /PID 64452\")",
+      "Bash(powershell -Command \"Stop-Process -Id 74724 -Force; Stop-Process -Id 64452 -Force\")",
+      "Bash(del temp_pdf_fix.py pdf_export_callback.py update_pdf_export.py temp_update_charts.py)",
+      "Bash(del:*)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(powershell:*)",
+      "Bash(cmd /c \"dir /s /a nul\")",
+      "Bash(cmd /c:*)",
+      "Bash(git rev-parse:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
